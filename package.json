@@ -1,0 +1,21 @@
+{
+  "name": "loves-platform",
+  "version": "1.0.0",
+  "description": "Dual-mode social matching platform with AI features and blockchain integration",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "cd frontend && npm run build && cd ../backend && npm run build",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "setup": "node setup.js",
+    "generate-secrets": "node generate-secrets.js"
+  },
+  "keywords": ["social", "matching", "ai", "blockchain"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+

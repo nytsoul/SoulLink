@@ -1,0 +1,12 @@
+backend/
+node_modules/
+.env
+.env.local
+*.log
+.git/
+.vscode/
+.idea/
+uploads/
+contracts/
+
+
