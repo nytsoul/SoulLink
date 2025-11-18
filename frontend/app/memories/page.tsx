@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth } from '@/hooks/useAuth' // Assuming this hook exists for auth state
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import { Image, Video, Upload, Trash2, Download, Eye } from 'lucide-react'
-import toast from 'react-hot-toast'
+import toast from 'react-hot-toast' // Assuming react-hot-toast is used for notifications
 
 type MemoryItem = {
   _id: string
@@ -28,24 +28,30 @@ export default function MemoriesPage() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewItem, setPreviewItem] = useState<MemoryItem | null>(null)
 
+  // Redirect unauthenticated users
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login')
     }
   }, [user, authLoading, router])
 
+  // Fetch memories once user is authenticated
   useEffect(() => {
     if (user) {
       fetchMemories()
     }
   }, [user])
 
+  // Helper function to safely get the API URL
   const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
   const fetchMemories = async () => {
     try {
       const url = getApiUrl()
-      const response = await axios.get(`${url}/api/memories`)
+      
+      // FIX: Used the local variable 'url' instead of the undefined 'API_URL'
+      const response = await axios.get(`${url}/api/memories`) 
+      
       const items = (response.data.items || []).map((item: any) => ({
         ...item,
         url:
@@ -277,6 +283,7 @@ export default function MemoriesPage() {
         </div>
       )}
 
+      {/* Preview Modal */}
       {previewOpen && previewItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={closePreview} />
