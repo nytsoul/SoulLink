@@ -32,7 +32,7 @@ export default function PersonalityQuizPage() {
 
   const fetchQuestions = async () => {
     try {
-      const response = await api.get('/personality/questions')
+      const response = await api.get('/api/personality/questions')
       setQuestions(response.data.questions)
       setLoading(false)
     } catch (error) {
@@ -45,7 +45,7 @@ export default function PersonalityQuizPage() {
   const startQuiz = async (selectedMode: 'love' | 'friends') => {
     try {
       setMode(selectedMode)
-      const response = await api.post('/personality/start', { mode: selectedMode })
+      const response = await api.post('/api/personality/start', { mode: selectedMode })
       setQuizId(response.data.quizId)
       setAnswers([])
       setCurrentQuestion(0)
@@ -77,7 +77,7 @@ export default function PersonalityQuizPage() {
   const submitQuiz = async (finalAnswers: any[]) => {
     try {
       setLoading(true)
-      const response = await api.post('/personality/submit', {
+      const response = await api.post('/api/personality/submit', {
         quizId,
         answers: finalAnswers,
       })

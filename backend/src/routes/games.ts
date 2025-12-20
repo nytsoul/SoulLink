@@ -10,12 +10,6 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 
     const games = [
       {
-        id: 'compatibility-quiz',
-        name: 'Compatibility Quiz',
-        description: mode === 'love' ? 'Test your romantic compatibility' : 'Test your friendship compatibility',
-        mode: 'both',
-      },
-      {
         id: 'would-you-rather',
         name: 'Would You Rather',
         description: 'Fun questions to get to know each other',

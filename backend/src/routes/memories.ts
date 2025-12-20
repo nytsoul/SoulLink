@@ -31,7 +31,7 @@ const upload = multer({
     const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|webm/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -47,13 +47,13 @@ router.get('/file/:filename', authenticate, async (req: AuthRequest, res: Respon
   try {
     const filename = req.params.filename;
     const filePath = path.join(uploadsDir, filename);
-    
+
     if (!fs.existsSync(filePath)) {
       // File missing on disk — redirect to frontend placeholder to avoid repeated 404s
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       return res.redirect(307, `${frontendUrl}/placeholder-image.svg`);
     }
-    
+
     // Set appropriate content-type based on file extension
     const ext = path.extname(filename).toLowerCase();
     let contentType = 'application/octet-stream';
@@ -65,12 +65,12 @@ router.get('/file/:filename', authenticate, async (req: AuthRequest, res: Respon
     else if (['.mov', '.quicktime'].includes(ext)) contentType = 'video/quicktime';
     else if (['.avi'].includes(ext)) contentType = 'video/x-msvideo';
     else if (['.webm'].includes(ext)) contentType = 'video/webm';
-    
+
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
 
     // Check if user has access to this file
-    const item = await MemoryItem.findOne({ 
+    const item = await MemoryItem.findOne({
       cidOrUrl: filename,
       $or: [
         { userId: req.userId },
@@ -82,7 +82,7 @@ router.get('/file/:filename', authenticate, async (req: AuthRequest, res: Respon
     if (!item && !filename.startsWith('photobooth-')) {
       return res.status(403).json({ message: 'Access denied' });
     }
-    
+
     res.sendFile(path.resolve(filePath));
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -108,9 +108,8 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 
     const count = await MemoryItem.countDocuments({ userId: req.userId });
 
-    // Add full URL to items
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const apiUrl = process.env.API_URL || process.env.FRONTEND_URL || 'http://localhost:5000';
+    // Use backend URL for serving files
+    const apiUrl = process.env.API_URL || 'http://localhost:5000';
     const itemsWithUrls = items.map(item => {
       const filename = path.basename(item.cidOrUrl);
       return {

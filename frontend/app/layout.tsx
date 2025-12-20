@@ -9,7 +9,7 @@ import Navbar from '@/components/Navbar'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Loves Platform - Dual-Mode Social Matching',
+  title: 'SoulLink - Dual-Mode Social Matching',
   description: 'Connect with love or friendship through AI-powered matching',
   icons: {
     icon: '/favicon.svg',
@@ -27,7 +27,7 @@ export default function RootLayout({
         <Providers>
           <AuthProvider>
             <Navbar />
-            <main className="min-h-screen">{children}</main>
+            <main className="min-h-screen pt-24">{children}</main>
             <Footer />
           </AuthProvider>
         </Providers>

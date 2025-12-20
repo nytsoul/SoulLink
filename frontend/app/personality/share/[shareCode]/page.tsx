@@ -35,7 +35,7 @@ export default function SharedQuizPage() {
 
   const fetchSharedQuiz = async () => {
     try {
-      const response = await api.get(`/personality/share/${shareCode}`)
+      const response = await api.get(`/api/personality/share/${shareCode}`)
       setQuestions(response.data.quiz.questions)
       setSharedBy(response.data.quiz.sharedBy)
       setOriginalQuizId(response.data.quiz.id)
@@ -68,7 +68,7 @@ export default function SharedQuizPage() {
   const submitQuiz = async (finalAnswers: any[]) => {
     try {
       setLoading(true)
-      const response = await api.post('/personality/submit-shared', {
+      const response = await api.post('/api/personality/submit-shared', {
         originalQuizId,
         answers: finalAnswers,
       })
@@ -100,10 +100,10 @@ export default function SharedQuizPage() {
       result.compatibility.score > 80
         ? 'text-green-600'
         : result.compatibility.score > 60
-        ? 'text-blue-600'
-        : result.compatibility.score > 40
-        ? 'text-yellow-600'
-        : 'text-red-600'
+          ? 'text-blue-600'
+          : result.compatibility.score > 40
+            ? 'text-yellow-600'
+            : 'text-red-600'
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-red-50 p-4">

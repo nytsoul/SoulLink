@@ -4,8 +4,11 @@ import { useEffect, useState, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth' // Assuming this hook exists for auth state
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
-import { Image, Video, Upload, Trash2, Download, Eye } from 'lucide-react'
-import toast from 'react-hot-toast' // Assuming react-hot-toast is used for notifications
+import api from '@/lib/api'
+import { Image as ImageIcon, Video, Upload, Trash2, Download, Eye, Sparkles, Shield } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { motion, AnimatePresence } from 'framer-motion'
+import { SpotlightCard } from '@/components/ui/SpotlightCard'
 
 type MemoryItem = {
   _id: string
@@ -48,18 +51,24 @@ export default function MemoriesPage() {
   const fetchMemories = async () => {
     try {
       const url = getApiUrl()
-      
-      // FIX: Used the local variable 'url' instead of the undefined 'API_URL'
-      const response = await axios.get(`${url}/api/memories`) 
-      
-      const items = (response.data.items || []).map((item: any) => ({
-        ...item,
-        url:
-          item.url ||
-          `${url}/api/memories/file/${
-            item.filename || item.cidOrUrl?.split('/').pop() || item.cidOrUrl
-          }`,
-      }))
+
+      // Use api instance with auth token
+      const response = await api.get('/api/memories')
+
+      const items = (response.data.items || []).map((item: any) => {
+        // Construct proper URL for the image
+        let imageUrl = item.url
+        
+        if (!imageUrl && (item.filename || item.cidOrUrl)) {
+          const fileName = item.filename || item.cidOrUrl
+          imageUrl = `${url}/api/memories/file/${fileName}`
+        }
+        
+        return {
+          ...item,
+          url: imageUrl,
+        }
+      })
       setMemories(items)
     } catch (error) {
       console.error('Failed to fetch memories:', error)
@@ -75,13 +84,12 @@ export default function MemoriesPage() {
 
     setUploading(true)
     try {
-      const url = getApiUrl()
       const formData = new FormData()
       Array.from(files).forEach((file) => {
         formData.append('files', file)
       })
 
-      const response = await axios.post(`${url}/api/memories/batch`, formData, {
+      const response = await api.post('/api/memories/batch', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
 
@@ -101,8 +109,7 @@ export default function MemoriesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this memory?')) return
     try {
-      const url = getApiUrl()
-      await axios.delete(`${url}/api/memories/${id}`)
+      await api.delete(`/api/memories/${id}`)
       toast.success('Memory deleted')
       fetchMemories()
     } catch (error: any) {
@@ -148,11 +155,25 @@ export default function MemoriesPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+    >
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
         <div>
-          <h1 className="text-3xl font-bold text-white">Memory Gallery</h1>
-          <p className="text-gray-400 mt-2">Store your precious moments (Max 500 items)</p>
+          <motion.h1
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="text-4xl font-black text-white flex items-center gap-3"
+          >
+            <div className="w-2 h-10 bg-gradient-to-b from-pink-500 to-purple-600 rounded-full" />
+            Memory Gallery
+          </motion.h1>
+          <p className="text-gray-500 mt-2 font-medium flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-pink-400" />
+            Chronicle your journey together (Max 500 items)
+          </p>
         </div>
         <div>
           <input
@@ -175,111 +196,138 @@ export default function MemoriesPage() {
       </div>
 
       {memories.length === 0 ? (
-        <div className="text-center py-16 bg-gray-800 rounded-lg shadow">
-          <Image className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <p className="text-gray-400 mb-4">No memories yet</p>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center py-24 bg-white/5 backdrop-blur-md rounded-[3rem] border border-white/10 shadow-2xl overflow-hidden relative"
+        >
+          <div className="absolute inset-0 opacity-5 pointer-events-none">
+            <ImageIcon className="w-96 h-96 -translate-x-20 -translate-y-20 rotate-12" />
+          </div>
+          <ImageIcon className="w-20 h-20 mx-auto text-pink-500/50 mb-6" />
+          <p className="text-xl text-gray-400 mb-8 font-medium">Your story hasn't started yet...</p>
           <label
             htmlFor="file-upload"
-            className="inline-flex items-center px-6 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 cursor-pointer"
+            className="inline-flex items-center px-8 py-4 bg-white text-pink-600 rounded-full font-black text-lg hover:shadow-2xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
           >
-            <Upload className="w-5 h-5 mr-2" />
-            Upload Your First Memory
+            <Upload className="w-5 h-5 mr-3" />
+            UPLOAD THE FIRST MEMORY
           </label>
-        </div>
+        </motion.div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {memories.map((memory) => (
-            <div
-              key={memory._id}
-              className="bg-gray-800 rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow group"
-            >
-              <div
-                className="relative aspect-square bg-gray-700 cursor-pointer"
-                onClick={() => openPreview(memory)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <AnimatePresence>
+            {memories.map((memory, index) => (
+              <motion.div
+                key={memory._id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ delay: index * 0.05 }}
+                className="group"
               >
-                {memory.mediaType === 'video' || memory.url?.includes('.mp4') || memory.url?.includes('.webm') || memory.url?.includes('.mov') ? (
-                  <video
-                    src={memory.url}
-                    className="w-full h-full object-cover"
-                    muted
-                    playsInline
-                    onMouseOver={(e) => (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
-                    onMouseOut={(e) => (e.currentTarget as HTMLVideoElement).pause()}
-                  />
-                ) : (
-                  <img
-                    src={memory.url || '/placeholder-image.svg'}
-                    alt={memory.title || 'Memory'}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/placeholder-image.svg'
-                    }}
-                  />
-                )}
+                <SpotlightCard className="bg-[#0f172a]/50 border-white/5 overflow-hidden h-full flex flex-col">
+                  <div
+                    className="relative aspect-[4/5] bg-gray-900 cursor-pointer overflow-hidden"
+                    onClick={() => openPreview(memory)}
+                  >
+                    {memory.mediaType === 'video' || memory.url?.includes('.mp4') || memory.url?.includes('.webm') || memory.url?.includes('.mov') ? (
+                      <video
+                        src={memory.url}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        muted
+                        playsInline
+                        onMouseOver={(e) => (e.currentTarget as HTMLVideoElement).play().catch(() => { })}
+                        onMouseOut={(e) => (e.currentTarget as HTMLVideoElement).pause()}
+                      />
+                    ) : (
+                      <img
+                        src={memory.url}
+                        alt={memory.title || 'Memory'}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.onerror = null // Prevent infinite loop
+                          target.style.display = 'none'
+                          // Show placeholder
+                          const parent = target.parentElement
+                          if (parent) {
+                            parent.innerHTML = `
+                              <div class="w-full h-full flex items-center justify-center bg-gray-800">
+                                <svg class="w-20 h-20 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                            `
+                          }
+                        }}
+                      />
+                    )}
 
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        openPreview(memory)
-                      }}
-                      className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-1"
-                      title="View"
-                    >
-                      <Eye className="w-4 h-4" />
-                      View
-                    </button>
-                    <button
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        downloadFile(memory.url!, memory.filename || memory.title || 'memory')
-                      }}
-                      className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-1"
-                      title="Download"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download
-                    </button>
-                    <button
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        handleDelete(memory._id)
-                      }}
-                      className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col justify-end p-6">
+                      <div className="flex gap-2 translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                        <button
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            openPreview(memory)
+                          }}
+                          className="flex-1 py-2 bg-white/20 backdrop-blur-md text-white rounded-xl hover:bg-white/30 flex items-center justify-center gap-2 text-xs font-bold transition-all border border-white/10"
+                        >
+                          <Eye className="w-4 h-4" />
+                          VIEW
+                        </button>
+                        <button
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            downloadFile(memory.url!, memory.filename || memory.title || 'memory')
+                          }}
+                          className="p-2 bg-white/20 backdrop-blur-md text-white rounded-xl hover:bg-white/30 border border-white/10"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            handleDelete(memory._id)
+                          }}
+                          className="p-2 bg-red-500/20 backdrop-blur-md text-red-500 rounded-xl hover:bg-red-500/30 border border-red-500/20"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
 
-                {memory.encrypted && (
-                  <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-white">
-                    Encrypted
+                    {memory.encrypted && (
+                      <div className="absolute top-4 left-4 p-2 bg-black/40 backdrop-blur-md rounded-lg border border-white/10">
+                        <Shield className="w-3 h-3 text-white" />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div className="p-3">
-                <h3 className="font-semibold text-sm truncate text-white">
-                  {memory.title || memory.filename || 'Untitled'}
-                </h3>
-                {memory.tags && memory.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {memory.tags.slice(0, 2).map((tag: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 bg-pink-900 text-pink-200 rounded text-xs"
-                      >
-                        {tag}
-                      </span>
-                    ))}
+                  <div className="p-5 border-t border-white/5">
+                    <h3 className="font-bold text-sm truncate text-white mb-3">
+                      {memory.title || memory.filename || 'Untitled Moment'}
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {(memory.tags || []).slice(0, 2).map((tag: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-1 bg-pink-500/10 text-pink-400 border border-pink-500/20 rounded-md text-[10px] font-bold uppercase tracking-wider"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {(!memory.tags || memory.tags.length === 0) && (
+                        <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-1">
+                          No Labels
+                        </span>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
+                </SpotlightCard>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
 
@@ -348,6 +396,6 @@ export default function MemoriesPage() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }

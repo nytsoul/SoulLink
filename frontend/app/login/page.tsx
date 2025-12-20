@@ -16,8 +16,9 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { login, dummyLogin } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [dummyLoading, setDummyLoading] = useState(false)
 
   const {
     register,
@@ -35,6 +36,17 @@ export default function LoginPage() {
       // Error handled in useAuth
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDummyLogin = async () => {
+    setDummyLoading(true)
+    try {
+      await dummyLogin()
+    } catch (error) {
+      // Error handled in useAuth
+    } finally {
+      setDummyLoading(false)
     }
   }
 
@@ -110,7 +122,7 @@ export default function LoginPage() {
             {/* Sign In Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || dummyLoading}
               className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none disabled:opacity-50"
             >
               {loading ? (
@@ -120,6 +132,23 @@ export default function LoginPage() {
                 </span>
               ) : (
                 '💕 Sign In'
+              )}
+            </button>
+
+            {/* Dummy Login Button */}
+            <button
+              type="button"
+              onClick={handleDummyLogin}
+              disabled={loading || dummyLoading}
+              className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl transition-all duration-200 border border-white/10 flex items-center justify-center gap-2"
+            >
+              {dummyLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-pink-500"></div>
+                  Waking up demo user...
+                </>
+              ) : (
+                <>🚀 Quick Demo Login</>
               )}
             </button>
           </form>

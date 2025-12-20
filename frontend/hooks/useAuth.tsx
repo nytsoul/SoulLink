@@ -21,6 +21,8 @@ interface AuthContextType {
   register: (data: any) => Promise<void>
   logout: () => void
   setMode: (mode: 'love' | 'friends') => Promise<void>
+  dummyLogin: () => Promise<void>
+  dummyRegister: (mode: 'love' | 'friends') => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -63,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`
       setUser(response.data.user)
       toast.success('Login successful!')
-      router.push('/ai/select-mode')
+      router.push('/dashboard')
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Login failed')
       throw error
@@ -77,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`
       setUser(response.data.user)
       toast.success('Registration successful! Please verify your email and phone.')
-      router.push('/ai/select-mode')
+      router.push('/dashboard')
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Registration failed')
       throw error
@@ -110,8 +112,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const dummyLogin = async () => {
+    try {
+      return await login('demo@example.com', 'password123')
+    } catch (error) {
+      console.log('Demo login failed, trying demo register instead...')
+      return await dummyRegister('love')
+    }
+  }
+
+  const dummyRegister = async (mode: 'love' | 'friends') => {
+    const randomSuffix = Math.floor(Math.random() * 10000)
+    const data = {
+      name: `Demo User ${randomSuffix}`,
+      email: `demo${randomSuffix}@example.com`,
+      phone: `+1555${randomSuffix.toString().padStart(4, '0')}00`,
+      password: 'password123',
+      dob: '1995-01-01',
+      modeDefault: mode,
+    }
+    return register(data)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, setMode }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, setMode, dummyLogin, dummyRegister }}>
       {children}
     </AuthContext.Provider>
   )

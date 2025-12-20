@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import jwt, { JwtPayload, Secret, SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import User from '../models/User';
 import { generateOTP, sendSMSOTP, storeOTP, verifyOTP } from '../utils/otp';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email';
@@ -20,18 +21,6 @@ function getEnv(key: 'JWT_SECRET' | 'JWT_REFRESH_SECRET' | 'JWT_EXPIRES_IN' | 'J
     throw new Error(`${key} is not set in environment`);
   }
   return v;
-}
-
-/** Safely extract a string userId from a Mongoose-like document or other object. */
-function getUserId(user: any): string {
-  if (!user) return '';
-  try {
-    if (user._id && typeof user._id.toString === 'function') return user._id.toString();
-  } catch {
-    // ignore
-  }
-  if (user.id) return String(user.id);
-  return String(user._id ?? '');
 }
 
 /** Interface for token payload we use */
@@ -56,17 +45,23 @@ router.post(
 
       const { name, email, phone, password, dob, gender, pronouns, location, bio, interests, profilePhotos, modeDefault } = req.body;
 
-      const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+      const existingUser = await User.findOne({
+        $or: [
+          { email },
+          { phone }
+        ]
+      });
+
       if (existingUser) {
         return res.status(400).json({ message: 'User with this email or phone already exists' });
       }
 
-      const user = new User({
+      const user = await User.create({
         name,
         email,
         phone,
-        password,
-        dob,
+        password, // Password will be hashed by User model pre-save hook
+        dob: new Date(dob),
         gender,
         pronouns,
         location,
@@ -77,31 +72,33 @@ router.post(
         modeLocked: true,
       });
 
-      await user.save();
-
       // Verification tokens
       const emailToken = crypto.randomBytes(32).toString('hex');
       const phoneOTP = generateOTP();
 
-      storeOTP(`email:${getUserId(user)}`, emailToken, 1440); // 24 hours
-      storeOTP(`phone:${getUserId(user)}`, phoneOTP, 10); // 10 minutes
+      storeOTP(`email:${user.id}`, emailToken, 1440); // 24 hours
+      storeOTP(`phone:${user.id}`, phoneOTP, 10); // 10 minutes
 
-      await sendVerificationEmail(user.email, emailToken);
-      await sendSMSOTP(user.phone, phoneOTP);
+      // Don't fail registration if email/sms fails in dev
+      try {
+        await sendVerificationEmail(user.email, emailToken);
+        await sendSMSOTP(user.phone, phoneOTP);
+      } catch (e) {
+        console.error('Failed to send verification:', e);
+      }
 
       // JWT creation
       const JWT_SECRET = getEnv('JWT_SECRET');
       const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? '24h';
 
-      const userId = getUserId(user);
       const signOptions = { expiresIn: JWT_EXPIRES_IN } as unknown as SignOptions;
-      const token = jwt.sign({ userId }, JWT_SECRET as Secret, signOptions);
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET as Secret, signOptions);
 
       res.status(201).json({
         message: 'Registration successful. Please verify your email and phone.',
         token,
         user: {
-          id: userId,
+          id: user.id,
           name: user.name,
           email: user.email,
           modeDefault: user.modeDefault,
@@ -124,13 +121,13 @@ router.post('/verify-email', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid or expired verification token' });
     }
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const user = await User.findByIdAndUpdate(userId, { isEmailVerified: true }, { new: true });
 
-    user.isEmailVerified = true;
-    await user.save();
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
-    res.json({ message: 'Email verified successfully', user: { id: user._id, name: user.name, email: user.email } });
+    res.json({ message: 'Email verified successfully', user: { id: user.id, name: user.name, email: user.email } });
   } catch (error: any) {
     console.error('Verify email error:', error);
     res.status(500).json({ message: error.message });
@@ -147,13 +144,13 @@ router.post('/verify-phone', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const user = await User.findByIdAndUpdate(userId, { isPhoneVerified: true }, { new: true });
 
-    user.isPhoneVerified = true;
-    await user.save();
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
-    res.json({ message: 'Phone verified successfully', user: { id: user._id, name: user.name, phone: user.phone } });
+    res.json({ message: 'Phone verified successfully', user: { id: user.id, name: user.name, phone: user.phone } });
   } catch (error: any) {
     console.error('Verify phone error:', error);
     res.status(500).json({ message: error.message });
@@ -175,7 +172,12 @@ router.post(
       const { email, password } = req.body;
       const user = await User.findOne({ email });
 
-      if (!user || !(await (user as any).comparePassword(password))) {
+      if (!user) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
         return res.status(401).json({ message: 'Invalid credentials' });
       }
 
@@ -184,19 +186,17 @@ router.post(
       const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? '24h';
       const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN ?? '7d';
 
-      const userId = getUserId(user);
-
       const signOptions = { expiresIn: JWT_EXPIRES_IN } as unknown as SignOptions;
       const refreshSignOptions = { expiresIn: JWT_REFRESH_EXPIRES_IN } as unknown as SignOptions;
 
-      const token = jwt.sign({ userId }, JWT_SECRET as Secret, signOptions);
-      const refreshToken = jwt.sign({ userId }, JWT_REFRESH_SECRET as Secret, refreshSignOptions);
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET as Secret, signOptions);
+      const refreshToken = jwt.sign({ userId: user.id }, JWT_REFRESH_SECRET as Secret, refreshSignOptions);
 
       res.json({
         token,
         refreshToken,
         user: {
-          id: userId,
+          id: user.id,
           name: user.name,
           email: user.email,
           modeDefault: user.modeDefault,
@@ -253,7 +253,7 @@ router.post('/forgot-password', [body('email').isEmail()], async (req: Request, 
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
-    storeOTP(`reset:${getUserId(user)}`, resetToken, 60); // 1 hour
+    storeOTP(`reset:${user.id}`, resetToken, 60); // 1 hour
 
     await sendPasswordResetEmail(user.email, resetToken);
     res.json({ message: 'If the email exists, a reset link has been sent' });
@@ -273,11 +273,9 @@ router.post('/reset-password', async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid or expired token' });
     }
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    user.password = newPassword;
-    await user.save();
+    await User.findByIdAndUpdate(userId, { password: hashedPassword }, { new: true });
 
     res.json({ message: 'Password reset successfully' });
   } catch (error: any) {
@@ -290,8 +288,14 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     // authenticate middleware must set req.userId as string
-    const user = await User.findById(req.userId).select('-password -securityPassphraseHash');
-    res.json({ user });
+    const user = await User.findById(req.userId);
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Exclude sensitive fields
+    const { password, securityPassphraseHash, ...userWithoutSensitive } = user;
+
+    res.json({ user: userWithoutSensitive });
   } catch (error: any) {
     console.error('Get me error:', error);
     res.status(500).json({ message: error.message });

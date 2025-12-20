@@ -28,9 +28,10 @@ const registerSchema = z.object({
 type RegisterForm = z.infer<typeof registerSchema>
 
 export default function RegisterPage() {
-  const { register: registerUser } = useAuth()
+  const { register: registerUser, dummyRegister } = useAuth()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [dummyLoading, setDummyLoading] = useState(false)
   const [selectedMode, setSelectedMode] = useState<'love' | 'friends'>('love')
   const [animate, setAnimate] = useState(false)
 
@@ -66,19 +67,29 @@ export default function RegisterPage() {
     }
   }
 
+  const handleDummyRegister = async () => {
+    setDummyLoading(true)
+    try {
+      await dummyRegister(selectedMode)
+    } catch (error) {
+      // Error handled in useAuth
+    } finally {
+      setDummyLoading(false)
+    }
+  }
+
   const isLoveMode = selectedMode === 'love'
 
   return (
-    <div className={`min-h-screen flex items-center justify-center py-8 px-4 transition-all duration-700 bg-gradient-to-br from-gray-900 to-gray-800`}> 
+    <div className={`min-h-screen flex items-center justify-center py-8 px-4 transition-all duration-700 bg-gradient-to-br from-gray-900 to-gray-800`}>
       {/* Floating hearts for love mode */}
       {isLoveMode && (
         <div className="fixed inset-0 pointer-events-none overflow-hidden">
           {[...Array(5)].map((_, i) => (
             <div
               key={i}
-              className={`absolute text-pink-300 opacity-20 text-6xl animate-pulse ${
-                animate ? 'animate-float' : ''
-              }`}
+              className={`absolute text-pink-300 opacity-20 text-6xl animate-pulse ${animate ? 'animate-float' : ''
+                }`}
               style={{
                 left: `${20 + i * 15}%`,
                 top: `${10 + i * 20}%`,
@@ -107,11 +118,10 @@ export default function RegisterPage() {
               setSelectedMode('love')
               setValue('modeDefault', 'love')
             }}
-            className={`p-6 rounded-2xl border-3 transition-all duration-500 transform ${
-              isLoveMode
-                ? 'border-pink-500 bg-gradient-to-br from-pink-100 to-red-100 shadow-2xl scale-105'
-                : 'border-gray-300 bg-white hover:border-pink-300'
-            }`}
+            className={`p-6 rounded-2xl border-3 transition-all duration-500 transform ${isLoveMode
+              ? 'border-pink-500 bg-gradient-to-br from-pink-100 to-red-100 shadow-2xl scale-105'
+              : 'border-gray-300 bg-white hover:border-pink-300'
+              }`}
           >
             <div className={`text-4xl mb-3 transition-transform duration-500 ${isLoveMode ? 'scale-125 animate-pulse' : 'scale-100'}`}>
               ❤️
@@ -128,11 +138,10 @@ export default function RegisterPage() {
               setSelectedMode('friends')
               setValue('modeDefault', 'friends')
             }}
-            className={`p-6 rounded-2xl border-3 transition-all duration-500 transform ${
-              !isLoveMode
-                ? 'border-indigo-500 bg-gradient-to-br from-blue-100 to-indigo-100 shadow-2xl scale-105'
-                : 'border-gray-300 bg-white hover:border-indigo-300'
-            }`}
+            className={`p-6 rounded-2xl border-3 transition-all duration-500 transform ${!isLoveMode
+              ? 'border-indigo-500 bg-gradient-to-br from-blue-100 to-indigo-100 shadow-2xl scale-105'
+              : 'border-gray-300 bg-white hover:border-indigo-300'
+              }`}
           >
             <div className={`text-4xl mb-3 transition-transform duration-500 ${!isLoveMode ? 'scale-125 animate-bounce' : 'scale-100'}`}>
               👥
@@ -169,43 +178,39 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={`block text-xs font-bold mb-2 transition-colors ${
-                  isLoveMode ? 'text-pink-400' : 'text-indigo-400'
-                }`}>
+                <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-400' : 'text-indigo-400'
+                  }`}>
                   Full Name *
                 </label>
                 <input
                   {...register('name')}
                   type="text"
                   placeholder="Your name"
-                  className={`w-full px-4 py-3 text-sm border-2 rounded-xl focus:outline-none transition-all ${
-                    isLoveMode
-                      ? 'border-gray-700 focus:border-pink-500 focus:ring-2 focus:ring-pink-500 bg-gray-800 text-white'
-                      : 'border-gray-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 bg-gray-800 text-white'
-                  }`}
+                  className={`w-full px-4 py-3 text-sm border-2 rounded-xl focus:outline-none transition-all ${isLoveMode
+                    ? 'border-gray-700 focus:border-pink-500 focus:ring-2 focus:ring-pink-500 bg-gray-800 text-white'
+                    : 'border-gray-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 bg-gray-800 text-white'
+                    }`}
                 />
                 {errors.name && <p className="mt-1 text-xs text-red-600 font-semibold">{errors.name.message}</p>}
               </div>
 
               <div>
-                <label className={`block text-xs font-bold mb-2 transition-colors ${
-                  isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-                }`}>
+                <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                  }`}>
                   Date of Birth *
                 </label>
                 <input
                   {...register('dob')}
                   type="date"
-                  className={`w-full px-4 py-3 text-sm border-2 rounded-xl focus:outline-none transition-all border-gray-700 bg-gray-800 text-white`} 
+                  className={`w-full px-4 py-3 text-sm border-2 rounded-xl focus:outline-none transition-all border-gray-700 bg-gray-800 text-white`}
                 />
                 {errors.dob && <p className="mt-1 text-xs text-red-600 font-semibold">{errors.dob.message}</p>}
               </div>
             </div>
 
             <div>
-              <label className={`block text-xs font-bold mb-2 transition-colors ${
-                isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-              }`}>
+              <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                }`}>
                 📧 Email *
               </label>
               <input
@@ -218,9 +223,8 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className={`block text-xs font-bold mb-2 transition-colors ${
-                isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-              }`}>
+              <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                }`}>
                 📞 Phone Number *
               </label>
               <input
@@ -234,9 +238,8 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={`block text-xs font-bold mb-2 transition-colors ${
-                  isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-                }`}>
+                <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                  }`}>
                   🔐 Password *
                 </label>
                 <input
@@ -249,9 +252,8 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className={`block text-xs font-bold mb-2 transition-colors ${
-                  isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-                }`}>
+                <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                  }`}>
                   ✔️ Confirm *
                 </label>
                 <input
@@ -265,9 +267,8 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className={`block text-xs font-bold mb-2 transition-colors ${
-                isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-              }`}>
+              <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                }`}>
                 📍 Location (Optional)
               </label>
               <input
@@ -279,9 +280,8 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className={`block text-xs font-bold mb-2 transition-colors ${
-                isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-              }`}>
+              <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                }`}>
                 ✨ Bio (Optional)
               </label>
               <textarea
@@ -294,9 +294,8 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className={`block text-xs font-bold mb-2 transition-colors ${
-                isLoveMode ? 'text-pink-600' : 'text-indigo-600'
-              }`}>
+              <label className={`block text-xs font-bold mb-2 transition-colors ${isLoveMode ? 'text-pink-600' : 'text-indigo-600'
+                }`}>
                 🎯 Interests (Optional)
               </label>
               <input
@@ -311,7 +310,7 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || dummyLoading}
               className={`w-full py-4 rounded-xl font-bold text-white text-lg transition-all duration-500 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl hover:shadow-2xl bg-gradient-to-r from-pink-600 to-purple-600`}
             >
               {loading ? (
@@ -323,6 +322,23 @@ export default function RegisterPage() {
                 <span className="flex items-center justify-center gap-2">
                   {isLoveMode ? '❤️' : '👥'} Create Account
                 </span>
+              )}
+            </button>
+
+            {/* Dummy Register Button */}
+            <button
+              type="button"
+              onClick={handleDummyRegister}
+              disabled={loading || dummyLoading}
+              className="w-full py-3 rounded-xl font-bold text-white bg-white/10 hover:bg-white/20 border border-white/10 transition-all flex items-center justify-center gap-2"
+            >
+              {dummyLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Generating identity...
+                </>
+              ) : (
+                <>✨ Quick Demo Register</>
               )}
             </button>
 

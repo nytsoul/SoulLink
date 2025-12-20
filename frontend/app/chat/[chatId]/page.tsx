@@ -55,7 +55,13 @@ export default function ChatPage() {
     })
 
     socket.on('receive-message', (data) => {
-      setMessages((prev) => [...prev, data])
+      setMessages((prev) => {
+        // Prevent duplicates - check if message already exists
+        if (prev.some(msg => msg._id === data._id)) {
+          return prev
+        }
+        return [...prev, data]
+      })
     })
 
     socketRef.current = socket
@@ -178,11 +184,10 @@ export default function ChatPage() {
                 className={`flex ${message.senderId._id === user.id ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    message.senderId._id === user.id
+                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.senderId._id === user.id
                       ? 'bg-pink-500 text-white'
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                  }`}
+                    }`}
                 >
                   <p className="text-sm font-semibold mb-1">
                     {message.senderId._id === user.id ? 'You' : message.senderId.name}
