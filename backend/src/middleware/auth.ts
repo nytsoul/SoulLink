@@ -1,11 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
-
-export interface AuthRequest extends Request {
-  userId?: string;
-  user?: any;
-}
+import { AuthRequest } from '../types/AuthRequest';
 
 export const authenticate = async (
   req: AuthRequest,
@@ -64,4 +60,6 @@ export const optionalAuth = async (
     next();
   }
 };
+
+export type { AuthRequest } from '../types/AuthRequest';
 

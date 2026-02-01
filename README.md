@@ -78,4 +78,7 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 ---
 
 **SoulLink** — Connect. Play. Grow. Powered by AI.
+<<<<<<< HEAD
 
+=======
+>>>>>>> 1893431 (Fix typings and deployment config)

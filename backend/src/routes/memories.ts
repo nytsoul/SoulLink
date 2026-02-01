@@ -14,10 +14,18 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure multer for file storage
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (
+    req: Express.Request,
+    file: Express.Multer.File,
+    cb: (error: Error | null, destination: string) => void
+  ) => {
     cb(null, uploadsDir);
   },
-  filename: (req, file, cb) => {
+  filename: (
+    req: Express.Request,
+    file: Express.Multer.File,
+    cb: (error: Error | null, filename: string) => void
+  ) => {
     const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
     const ext = path.extname(file.originalname);
     cb(null, `${uniqueSuffix}${ext}`);
@@ -27,7 +35,11 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
-  fileFilter: (req, file, cb) => {
+  fileFilter: (
+    req: Express.Request,
+    file: Express.Multer.File,
+    cb: (error: Error | null, acceptFile: boolean) => void
+  ) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|webm/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
