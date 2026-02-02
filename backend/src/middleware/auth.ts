@@ -1,6 +1,5 @@
 import { Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import User from '../models/User';
+import { supabase } from '../lib/supabaseClient';
 import { AuthRequest } from '../types/AuthRequest';
 
 export const authenticate = async (
@@ -16,22 +15,30 @@ export const authenticate = async (
       return;
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
-    const user = await User.findById(decoded.userId);
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
 
-    if (!user) {
-      res.status(401).json({ message: 'User not found' });
+    if (authError || !authUser) {
+      res.status(401).json({ message: 'Invalid or expired token' });
       return;
     }
 
-    // Exclude sensitive fields
-    const { password, securityPassphraseHash, ...userWithoutSensitive } = user;
+    // Fetch profile from profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
 
-    req.userId = decoded.userId;
-    req.user = userWithoutSensitive;
+    if (profileError || !profile) {
+      res.status(401).json({ message: 'User profile not found' });
+      return;
+    }
+
+    req.userId = authUser.id;
+    req.user = profile;
     next();
   } catch (error) {
-    res.status(401).json({ message: 'Invalid or expired token' });
+    res.status(500).json({ message: 'Authentication error' });
   }
 };
 
@@ -44,15 +51,19 @@ export const optionalAuth = async (
     const token = req.headers.authorization?.replace('Bearer ', '');
 
     if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
-      const user = await User.findById(decoded.userId);
+      const { data: { user: authUser } } = await supabase.auth.getUser(token);
 
-      if (user) {
-        // Exclude sensitive fields
-        const { password, securityPassphraseHash, ...userWithoutSensitive } = user;
+      if (authUser) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .single();
 
-        req.userId = decoded.userId;
-        req.user = userWithoutSensitive;
+        if (profile) {
+          req.userId = authUser.id;
+          req.user = profile;
+        }
       }
     }
     next();

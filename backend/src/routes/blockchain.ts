@@ -1,61 +1,44 @@
 import express, { Response } from 'express';
+import { supabase } from '../lib/supabaseClient';
 import { authenticate, AuthRequest } from '../middleware/auth';
-import ConsentRecord from '../models/ConsentRecord';
-import Verification from '../models/Verification';
 
 const router = express.Router();
 
-// Get blockchain records for user
+// Get records
 router.get('/records', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const consents = await ConsentRecord.find({
-      userId: req.userId,
-      onChainTxHash: { $exists: true, $ne: null },
-    }).sort({ createdAt: -1 });
+    const { data: consents } = await supabase
+      .from('consent_records')
+      .select('*')
+      .eq('user_id', req.userId)
+      .not('on_chain_tx_hash', 'is', null)
+      .order('created_at', { ascending: false });
 
-    const verifications = await Verification.find({
-      userId: req.userId,
-      onChainTxHash: { $exists: true, $ne: null },
-    }).sort({ createdAt: -1 });
+    const { data: verifications } = await supabase
+      .from('verifications')
+      .select('*')
+      .eq('user_id', req.userId)
+      .not('on_chain_tx_hash', 'is', null)
+      .order('created_at', { ascending: false });
 
     res.json({
-      consents: consents.map((c) => ({
-        type: c.consentType,
-        hash: c.consentHash,
-        txHash: c.onChainTxHash,
-        timestamp: c.createdAt,
-      })),
-      verifications: verifications.map((v) => ({
-        type: v.type,
-        hash: v.proofHash,
-        txHash: v.onChainTxHash,
-        timestamp: v.createdAt,
-      })),
+      consents: consents?.map((c: any) => ({ type: c.consent_type, hash: c.consent_hash, txHash: c.on_chain_tx_hash, timestamp: c.created_at })),
+      verifications: verifications?.map((v: any) => ({ type: v.type, hash: v.proof_hash, txHash: v.on_chain_tx_hash, timestamp: v.created_at })),
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Verify on-chain record
+// Verify tx
 router.get('/verify/:txHash', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { txHash } = req.params;
+    const { data: consent } = await supabase.from('consent_records').select('*').eq('on_chain_tx_hash', txHash).eq('user_id', req.userId).single();
+    const { data: verification } = await supabase.from('verifications').select('*').eq('on_chain_tx_hash', txHash).eq('user_id', req.userId).single();
 
-    // In production, query blockchain here
-    // For now, check if record exists in DB
-    const consent = await ConsentRecord.findOne({ onChainTxHash: txHash, userId: req.userId });
-    const verification = await Verification.findOne({ onChainTxHash: txHash, userId: req.userId });
-
-    if (!consent && !verification) {
-      return res.status(404).json({ message: 'Record not found' });
-    }
-
-    res.json({
-      verified: true,
-      record: consent || verification,
-      txHash,
-    });
+    if (!consent && !verification) return res.status(404).json({ message: 'Record not found' });
+    res.json({ verified: true, record: consent || verification, txHash });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

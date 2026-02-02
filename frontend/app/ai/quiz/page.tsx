@@ -8,8 +8,9 @@ import axios from 'axios'
 import { Loader2, CheckCircle2, ArrowRight, ArrowLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Suspense } from 'react'
 
-export default function QuizPage() {
+function QuizContent() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -246,6 +247,14 @@ export default function QuizPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function QuizPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading quiz...</div>}>
+      <QuizContent />
+    </Suspense>
   )
 }
 

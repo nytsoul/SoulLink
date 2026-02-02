@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
-import { Heart, Gamepad2, Play, Sparkles, Trophy, Users, TrendingUp, Zap, Handshake, ArrowRight, LucideIcon } from 'lucide-react'
+import { Heart, Gamepad2, Play, Sparkles, Trophy, Users, TrendingUp, Zap, ArrowRight, type LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import toast from 'react-hot-toast'
 
 export default function GamesPage() {
   const { user, loading: authLoading } = useAuth()
@@ -31,13 +32,7 @@ export default function GamesPage() {
     }
   }, [user, authLoading, router])
 
-  useEffect(() => {
-    if (user) {
-      fetchGames()
-    }
-  }, [user])
-
-  const fetchGames = async () => {
+  const fetchGames = useCallback(async () => {
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/games`, {
         params: { mode: user?.modeDefault || 'love' },
@@ -48,7 +43,13 @@ export default function GamesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.modeDefault])
+
+  useEffect(() => {
+    if (user) {
+      fetchGames()
+    }
+  }, [user, fetchGames])
 
   if (authLoading || loading) {
     return (

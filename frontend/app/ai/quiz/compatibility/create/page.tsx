@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import axios from 'axios'
-import { Loader2, Copy, CheckCircle2, ArrowRight, Plus, Trash2, Sparkles } from 'lucide-react'
+import { Loader2, Copy, CheckCircle2, ArrowRight, Plus, Trash2, Sparkles, Share2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 

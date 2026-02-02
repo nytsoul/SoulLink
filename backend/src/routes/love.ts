@@ -1,9 +1,6 @@
 import express, { Response } from 'express';
 import OpenAI from 'openai';
-import LoveLetter from '../models/LoveLetter';
-import MoodEntry from '../models/MoodTracker';
-import SurpriseDrop from '../models/SurpriseDrop';
-import SecretGift from '../models/SecretGift';
+import { supabase } from '../lib/supabaseClient';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
 
@@ -29,37 +26,34 @@ const aiLimiter = rateLimit({
 // Love Letter Generator
 router.post('/letter', authenticate, aiLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    const { keywords, recipientName, mode = 'love', tone = 'romantic' } = req.body;
+    const { keywords, recipientName, recipientId, mode = 'love', tone = 'romantic' } = req.body;
 
-    if (!openai) {
-      const fallback = `Dear ${recipientName || 'Beloved'},\n\n${keywords?.join(', ') || 'Thinking of you'} fills my heart with joy.\n\nWith love,\nYou`;
-      return res.json({ letter: fallback, mode });
+    let content = `Dear ${recipientName || 'Beloved'},\n\n${keywords?.join(', ') || 'Thinking of you'}.\n\nWith love,\nYou`;
+
+    if (openai) {
+      const prompt = `Write a ${mode} letter to ${recipientName || 'someone'} about ${keywords?.join(', ') || 'love'} with ${tone} tone.`;
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: prompt }],
+      });
+      content = completion.choices[0]?.message?.content || content;
     }
 
-    const prompt = `Write a ${mode === 'love' ? 'romantic' : 'warm friendship'} letter${recipientName ? ` to ${recipientName}` : ''}${keywords ? ` incorporating these themes: ${keywords.join(', ')}` : ''} with a ${tone} tone. Make it personal and heartfelt.`;
+    const { data: letter, error } = await supabase
+      .from('love_letters')
+      .insert({
+        user_id: req.userId,
+        recipient_id: recipientId,
+        title: `Letter to ${recipientName || 'Special Someone'}`,
+        content,
+        keywords: keywords || [],
+        mode,
+      })
+      .select()
+      .single();
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        { role: 'system', content: 'You are a romantic letter writer. Create heartfelt, personal letters.' },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: 500,
-      temperature: 0.9,
-    });
-
-    const content = completion.choices[0]?.message?.content || '';
-
-    const letter = new LoveLetter({
-      userId: req.userId,
-      title: `Letter to ${recipientName || 'Special Someone'}`,
-      content,
-      keywords: keywords || [],
-      mode,
-    });
-    await letter.save();
-
-    res.json({ letter: letter.toObject() });
+    if (error) return res.status(500).json({ message: error.message });
+    res.json({ letter });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -68,7 +62,13 @@ router.post('/letter', authenticate, aiLimiter, async (req: AuthRequest, res: Re
 // Get love letters
 router.get('/letters', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const letters = await LoveLetter.find({ userId: req.userId }).sort({ createdAt: -1 });
+    const { data: letters, error } = await supabase
+      .from('love_letters')
+      .select('*')
+      .eq('user_id', req.userId)
+      .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ message: error.message });
     res.json({ letters });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -79,46 +79,48 @@ router.get('/letters', authenticate, async (req: AuthRequest, res: Response) => 
 router.post('/letters/:id/send', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { recipientId } = req.body;
-    const letter = await LoveLetter.findOne({ _id: req.params.id, userId: req.userId });
-    if (!letter) return res.status(404).json({ message: 'Letter not found' });
+    const { data: letter, error } = await supabase
+      .from('love_letters')
+      .update({ recipient_id: recipientId, is_sent: true, sent_at: new Date() })
+      .eq('id', req.params.id)
+      .eq('user_id', req.userId)
+      .select()
+      .single();
 
-    letter.recipientId = recipientId;
-    letter.isSent = true;
-    letter.sentAt = new Date();
-    await letter.save();
-
+    if (error) return res.status(404).json({ message: 'Letter not found' });
     res.json({ letter });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Mood Tracker - Log mood
+// Mood Tracker
 router.post('/mood', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { mood, notes, partnerId } = req.body;
-    const entry = new MoodEntry({
-      userId: req.userId,
-      partnerId,
-      mood,
-      notes,
-    });
-    await entry.save();
+    const { data: entry, error } = await supabase
+      .from('mood_entries')
+      .insert({ user_id: req.userId, partner_id: partnerId, mood, notes })
+      .select()
+      .single();
 
-    // Get AI suggestion if both partners have entries
+    if (error) return res.status(500).json({ message: error.message });
+
     let suggestion = null;
     if (partnerId && openai) {
-      const partnerEntry = await MoodEntry.findOne({
-        userId: partnerId,
-        date: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      }).sort({ createdAt: -1 });
+      const { data: partnerEntry } = await supabase
+        .from('mood_entries')
+        .select('mood')
+        .eq('user_id', partnerId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
       if (partnerEntry) {
-        const prompt = `User mood: ${mood}, Partner mood: ${partnerEntry.mood}. Suggest an activity or message to help them connect.`;
+        const prompt = `User: ${mood}, Partner: ${partnerEntry.mood}. Suggest connection activity.`;
         const completion = await openai.chat.completions.create({
           model: 'gpt-3.5-turbo',
           messages: [{ role: 'user', content: prompt }],
-          max_tokens: 200,
         });
         suggestion = completion.choices[0]?.message?.content;
       }
@@ -133,59 +135,50 @@ router.post('/mood', authenticate, async (req: AuthRequest, res: Response) => {
 // Get mood history
 router.get('/mood', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { partnerId, days = 30 } = req.query;
+    const { days = 30 } = req.query;
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(days as string));
+    startDate.setDate(startDate.getDate() - Number(days));
 
-    const query: any = {
-      $or: [{ userId: req.userId }, { partnerId: req.userId }],
-      date: { $gte: startDate },
-    };
+    const { data: entries, error } = await supabase
+      .from('mood_entries')
+      .select('*')
+      .or(`user_id.eq.${req.userId},partner_id.eq.${req.userId}`)
+      .gte('date', startDate.toISOString())
+      .order('date', { ascending: false });
 
-    const entries = await MoodEntry.find(query).sort({ date: -1 });
+    if (error) return res.status(500).json({ message: error.message });
     res.json({ entries });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Surprise Drop - Create
+// Surprise Drop
 router.post('/surprise', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { type, title, content, mediaUrl, scheduledFor, recipientId, countdownMessage } = req.body;
+    const { data: surprise, error } = await supabase
+      .from('surprise_drops')
+      .insert({ ...req.body, user_id: req.userId })
+      .select()
+      .single();
 
-    const surprise = new SurpriseDrop({
-      userId: req.userId,
-      recipientId,
-      type,
-      title,
-      content,
-      mediaUrl,
-      scheduledFor: new Date(scheduledFor),
-      countdownMessage,
-    });
-    await surprise.save();
-
+    if (error) return res.status(500).json({ message: error.message });
     res.status(201).json({ surprise });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Get surprise drops
+// Get surprises
 router.get('/surprise', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { upcoming = true } = req.query;
-    const query: any = {
-      $or: [{ userId: req.userId }, { recipientId: req.userId }],
-    };
+    const { data: surprises, error } = await supabase
+      .from('surprise_drops')
+      .select('*')
+      .or(`user_id.eq.${req.userId},recipient_id.eq.${req.userId}`)
+      .order('scheduled_for', { ascending: true });
 
-    if (upcoming === 'true') {
-      query.scheduledFor = { $gte: new Date() };
-      query.isUnlocked = false;
-    }
-
-    const surprises = await SurpriseDrop.find(query).sort({ scheduledFor: 1 });
+    if (error) return res.status(500).json({ message: error.message });
     res.json({ surprises });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -195,98 +188,32 @@ router.get('/surprise', authenticate, async (req: AuthRequest, res: Response) =>
 // Unlock surprise
 router.post('/surprise/:id/unlock', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const surprise = await SurpriseDrop.findOne({
-      _id: req.params.id,
-      $or: [{ userId: req.userId }, { recipientId: req.userId }],
-    });
+    const { data: surprise, error } = await supabase
+      .from('surprise_drops')
+      .update({ is_unlocked: true, unlocked_at: new Date() })
+      .eq('id', req.params.id)
+      .or(`user_id.eq.${req.userId},recipient_id.eq.${req.userId}`)
+      .select()
+      .single();
 
-    if (!surprise) return res.status(404).json({ message: 'Surprise not found' });
-    if (new Date() < surprise.scheduledFor) {
-      return res.status(400).json({ message: 'Surprise not yet available' });
-    }
-
-    surprise.isUnlocked = true;
-    surprise.unlockedAt = new Date();
-    await surprise.save();
-
+    if (error) return res.status(404).json({ message: 'Surprise not found' });
     res.json({ surprise });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Secret Gift - Create
+// Secret Gift
 router.post('/gift', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { recipientId, title, type, content, mediaUrl, clues, triviaQuestions, maxAttempts = 3 } = req.body;
+    const { data: gift, error } = await supabase
+      .from('secret_gifts')
+      .insert({ ...req.body, user_id: req.userId })
+      .select()
+      .single();
 
-    const gift = new SecretGift({
-      userId: req.userId,
-      recipientId,
-      title,
-      type,
-      content,
-      mediaUrl,
-      clues: clues || [],
-      triviaQuestions: triviaQuestions || [],
-      maxAttempts,
-    });
-    await gift.save();
-
+    if (error) return res.status(500).json({ message: error.message });
     res.status(201).json({ gift });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Unlock secret gift
-router.post('/gift/:id/unlock', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { answer, clueAnswer } = req.body;
-    const gift = await SecretGift.findOne({
-      _id: req.params.id,
-      recipientId: req.userId,
-      isUnlocked: false,
-    });
-
-    if (!gift) return res.status(404).json({ message: 'Gift not found or already unlocked' });
-    if (gift.attempts >= gift.maxAttempts) {
-      return res.status(400).json({ message: 'Maximum attempts reached' });
-    }
-
-    gift.attempts += 1;
-
-    // Check answer
-    let isCorrect = false;
-    if (answer && gift.triviaQuestions && gift.triviaQuestions.length > 0) {
-      isCorrect = gift.triviaQuestions.some(q => q.answer.toLowerCase() === answer.toLowerCase());
-    } else if (clueAnswer && gift.clues.length > 0) {
-      // Simple clue matching (can be enhanced)
-      isCorrect = true; // For now, accept any answer
-    }
-
-    if (isCorrect) {
-      gift.isUnlocked = true;
-      gift.unlockedAt = new Date();
-    }
-
-    await gift.save();
-
-    res.json({ gift, isCorrect, attemptsRemaining: gift.maxAttempts - gift.attempts });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get secret gifts
-router.get('/gift', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const gifts = await SecretGift.find({
-      recipientId: req.userId,
-      isUnlocked: false,
-    }).sort({ createdAt: -1 });
-
-    res.json({ gifts });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

@@ -1,5 +1,6 @@
 import express, { Response } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { supabase } from '../lib/supabaseClient';
 
 const router = express.Router();
 
@@ -47,22 +48,18 @@ router.get('/:gameId/questions', authenticate, async (req: AuthRequest, res: Res
     const { gameId } = req.params;
     const { mode = 'love' } = req.query;
 
-    // Simple game questions (in production, use AI or database)
     const questionSets: Record<string, any[]> = {
       'would-you-rather': [
-        { question: 'Would you rather go on a beach vacation or mountain adventure?', options: ['Beach', 'Mountain'] },
-        { question: 'Would you rather have dinner at a fancy restaurant or cook together at home?', options: ['Restaurant', 'Home'] },
-        { question: 'Would you rather watch a movie or go for a walk?', options: ['Movie', 'Walk'] },
+        { question: 'Beach or mountain?', options: ['Beach', 'Mountain'] },
+        { question: 'Restaurant or cook at home?', options: ['Restaurant', 'Home'] },
       ],
       'truth-or-dare': [
         { question: 'What is your biggest fear?', type: 'truth' },
         { question: 'Dare: Send a funny selfie', type: 'dare' },
-        { question: 'What is your most embarrassing moment?', type: 'truth' },
       ],
     };
 
     const questions = questionSets[gameId] || [];
-
     res.json({ questions, gameId, mode });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -75,13 +72,21 @@ router.post('/:gameId/result', authenticate, async (req: AuthRequest, res: Respo
     const { gameId } = req.params;
     const { answers, score, participantId } = req.body;
 
-    // Store game result (create GameResult model if needed)
-    res.json({
-      message: 'Game result saved',
-      gameId,
-      score,
-      participantId,
-    });
+    const { data: result, error } = await supabase
+      .from('game_results')
+      .insert({
+        user_id: req.userId,
+        game_id: gameId,
+        score,
+        answers,
+        participant_id: participantId,
+      })
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    res.status(201).json({ message: 'Result saved', result });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

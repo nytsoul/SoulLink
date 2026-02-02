@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
@@ -21,7 +21,7 @@ export default function WouldYouRatherPage() {
         }
     }, [user, authLoading, router])
 
-    const fetchQuestions = async () => {
+    const fetchQuestions = useCallback(async () => {
         try {
             setLoading(true)
             const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/games/would-you-rather/questions`, {
@@ -36,13 +36,13 @@ export default function WouldYouRatherPage() {
             toast.error('Failed to load questions')
             setLoading(false)
         }
-    }
+    }, [user?.modeDefault])
 
     useEffect(() => {
         if (user) {
             fetchQuestions()
         }
-    }, [user])
+    }, [user, fetchQuestions])
 
     const nextQuestion = () => {
         if (currentIndex < questions.length - 1) {

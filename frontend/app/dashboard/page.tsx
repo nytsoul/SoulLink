@@ -1,18 +1,126 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
-import { Heart, Users, Sparkles, Calendar, MessageCircle, Image, Shield, ArrowRight } from 'lucide-react'
+import {
+  Heart, Users, Sparkles, Calendar, MessageCircle, ImageIcon, Shield, ArrowRight,
+  TrendingUp, Star, Gift, Zap, Clock, MapPin, Activity, Settings, Bell, Search
+} from 'lucide-react'
 import Link from 'next/link'
 import axios from 'axios'
 import { motion } from 'framer-motion'
-import { SpotlightCard } from '@/components/ui/SpotlightCard'
+
+interface QuickActionProps {
+  icon: React.ReactNode
+  title: string
+  description: string
+  href: string
+  gradient: string
+  delay?: number
+}
+
+function QuickActionCard({ icon, title, description, href, gradient, delay = 0 }: QuickActionProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay }}
+      whileHover={{ scale: 1.02, y: -5 }}
+      className="group"
+    >
+      <Link href={href} className="block">
+        <div className={`relative p-6 glass rounded-2xl hover:shadow-glass-lg transition-all duration-300 overflow-hidden group`}>
+          <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl`} />
+          <div className="relative z-10">
+            <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${gradient} mb-4 group-hover:scale-110 transition-transform duration-300`}>
+              {icon}
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2 group-hover:text-white transition-colors">
+              {title}
+            </h3>
+            <p className="text-gray-300 group-hover:text-gray-100 transition-colors text-sm">
+              {description}
+            </p>
+            <ArrowRight className="w-5 h-5 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all mt-3" />
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+  )
+}
+
+function StatCard({ icon, label, value, change, changeType, delay = 0 }: {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  change?: string
+  changeType?: 'positive' | 'negative' | 'neutral'
+  delay?: number
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay }}
+      className="glass rounded-2xl p-6 hover:shadow-glass-lg transition-all duration-300 hover:scale-105"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="p-3 bg-gradient-primary rounded-xl">
+          {icon}
+        </div>
+        {change && (
+          <div className={`flex items-center text-sm font-medium ${changeType === 'positive' ? 'text-green-400' :
+              changeType === 'negative' ? 'text-red-400' : 'text-gray-400'
+            }`}>
+            <TrendingUp className="w-4 h-4 mr-1" />
+            {change}
+          </div>
+        )}
+      </div>
+      <div className="text-3xl font-black gradient-text mb-1">{value}</div>
+      <div className="text-sm text-gray-400 font-medium">{label}</div>
+    </motion.div>
+  )
+}
+
+function ActivityItem({ icon, title, time, status }: {
+  icon: React.ReactNode
+  title: string
+  time: string
+  status?: 'online' | 'offline' | 'away'
+}) {
+  return (
+    <div className="flex items-center space-x-3 p-3 glass rounded-xl hover:bg-white/5 transition-all">
+      <div className="relative">
+        <div className="p-2 bg-gradient-primary rounded-lg">
+          {icon}
+        </div>
+        {status && (
+          <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${status === 'online' ? 'bg-green-400' :
+              status === 'away' ? 'bg-yellow-400' : 'bg-gray-400'
+            }`} />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white truncate">{title}</p>
+        <p className="text-xs text-gray-400">{time}</p>
+      </div>
+    </div>
+  )
+}
 
 export default function DashboardPage() {
-  const { user, loading: authLoading, setMode } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const [stats, setStats] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -20,138 +128,314 @@ export default function DashboardPage() {
     }
   }, [user, authLoading, router])
 
+  const fetchStats = useCallback(async () => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+      setLoading(true)
+
+      // Fetch user stats with error handling for each endpoint
+      const [chatsRes, memoriesRes] = await Promise.all([
+        axios.get(`${API_URL}/api/chat`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        }).catch(() => ({ data: { chats: [] } })),
+        axios.get(`${API_URL}/api/memories`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        }).catch(() => ({ data: { memories: [] } })),
+      ])
+
+      setStats({
+        matches: Math.floor(Math.random() * 50) + 1, // Mock data
+        chats: Array.isArray(chatsRes.data.chats) ? chatsRes.data.chats.length : 0,
+        memories: Array.isArray(memoriesRes.data.memories) ? memoriesRes.data.memories.length : memoriesRes.data.count || 0,
+        profileViews: Math.floor(Math.random() * 200) + 50, // Mock data
+        connections: Math.floor(Math.random() * 30) + 5, // Mock data
+      })
+    } catch (error) {
+      console.error('Failed to fetch stats:', error)
+      // Set default stats if API fails
+      setStats({
+        matches: 0,
+        chats: 0,
+        memories: 0,
+        profileViews: 0,
+        connections: 0,
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (user) {
       fetchStats()
     }
-  }, [user])
+  }, [user, fetchStats])
 
-  const fetchStats = async () => {
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-      // Fetch user stats (matches endpoint removed; avoid calling missing route)
-      const [chatsRes, memoriesRes] = await Promise.all([
-        axios.get(`${API_URL}/api/chat`).catch(() => ({ data: { chats: [] } })),
-        axios.get(`${API_URL}/api/memories`).catch(() => ({ data: { count: 0 } })),
-      ])
-
-      setStats({
-        matches: 0,
-        chats: chatsRes.data.chats?.length || 0,
-        memories: memoriesRes.data.count || 0,
-      })
-    } catch (error) {
-      console.error('Failed to fetch stats:', error)
-    }
-  }
-
-  if (authLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
+  if (authLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="glass rounded-2xl p-8">
+          <div className="flex items-center space-x-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-400"></div>
+            <span className="text-white font-medium">Loading your dashboard...</span>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!user) {
     return null
   }
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
-    >
-      <div className="mb-8">
-        <motion.h1
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="text-4xl font-black text-white mb-2"
-        >
-          Welcome back, <span className="text-pink-500">{user.name}</span>!
-        </motion.h1>
-        <p className="text-gray-400 font-medium">
-          Current session: <span className="text-pink-400/80 capitalize">{user.modeDefault}</span> Mode
-        </p>
-      </div>
+  const quickActions = [
+    {
+      icon: <Heart className="w-6 h-6 text-white" />,
+      title: "Find Matches",
+      description: "Discover new connections",
+      href: "/matches",
+      gradient: "from-pink-500/20 to-rose-500/20"
+    },
+    {
+      icon: <MessageCircle className="w-6 h-6 text-white" />,
+      title: "Start Chatting",
+      description: "Continue conversations",
+      href: "/chat",
+      gradient: "from-blue-500/20 to-indigo-500/20"
+    },
+    {
+      icon: <Sparkles className="w-6 h-6 text-white" />,
+      title: "AI Features",
+      description: "Explore AI-powered tools",
+      href: "/ai/select-mode",
+      gradient: "from-purple-500/20 to-violet-500/20"
+    },
+    {
+      icon: <Calendar className="w-6 h-6 text-white" />,
+      title: "Plan Events",
+      description: "Schedule meetups",
+      href: "/calendar",
+      gradient: "from-green-500/20 to-emerald-500/20"
+    },
+    {
+      icon: <ImageIcon className="w-6 h-6 text-white" />,
+      title: "Share Memories",
+      description: "Upload and view memories",
+      href: "/memories",
+      gradient: "from-orange-500/20 to-amber-500/20"
+    },
+    {
+      icon: <Gift className="w-6 h-6 text-white" />,
+      title: "Send Gifts",
+      description: "Surprise someone special",
+      href: "/gifts",
+      gradient: "from-cyan-500/20 to-teal-500/20"
+    }
+  ]
 
-      {/* Mode Display (Locked) */}
-      <motion.div
-        whileHover={{ scale: 1.01 }}
-        className="mb-12 bg-white/5 backdrop-blur-md rounded-[2rem] p-8 border border-white/10 shadow-2xl relative overflow-hidden group"
-      >
-        <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-          <Heart className="w-48 h-48 -rotate-12" />
+  const recentActivities = [
+    { icon: <Heart className="w-4 h-4 text-white" />, title: "New match found", time: "2 minutes ago", status: 'online' as const },
+    { icon: <MessageCircle className="w-4 h-4 text-white" />, title: "Message from Sarah", time: "5 minutes ago", status: 'online' as const },
+    { icon: <Star className="w-4 h-4 text-white" />, title: "Profile view from Alex", time: "1 hour ago", status: 'away' as const },
+    { icon: <Gift className="w-4 h-4 text-white" />, title: "Gift received", time: "2 hours ago", status: 'offline' as const },
+  ]
+
+  return (
+    <div className="min-h-screen bg-dark-900 text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-4xl lg:text-5xl font-black mb-2">
+                Welcome back, <span className="gradient-text">{user.name}</span>!
+              </h1>
+              <p className="text-gray-400 text-lg">
+                {currentTime.toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
+            </div>
+            <div className="mt-4 lg:mt-0 flex items-center space-x-4">
+              <div className={`flex items-center space-x-2 px-4 py-2 rounded-full border ${user.modeDefault === 'love'
+                  ? 'bg-pink-500/20 text-pink-400 border-pink-500/30'
+                  : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                }`}>
+                {user.modeDefault === 'love' ? (
+                  <>
+                    <Heart className="w-4 h-4 fill-current" />
+                    <span className="font-bold">Love Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-4 h-4" />
+                    <span className="font-bold">Friend Mode</span>
+                  </>
+                )}
+              </div>
+              <Link href="/settings" className="p-3 glass rounded-xl hover:shadow-glow-primary transition-all">
+                <Settings className="w-5 h-5 text-white/80" />
+              </Link>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <StatCard
+            icon={<Heart className="w-5 h-5 text-white" />}
+            label="Total Matches"
+            value={stats?.matches || 0}
+            change="+12%"
+            changeType="positive"
+            delay={0.1}
+          />
+          <StatCard
+            icon={<MessageCircle className="w-5 h-5 text-white" />}
+            label="Active Chats"
+            value={stats?.chats || 0}
+            change="+5%"
+            changeType="positive"
+            delay={0.2}
+          />
+          <StatCard
+            icon={<ImageIcon className="w-5 h-5 text-white" />}
+            label="Memories Shared"
+            value={stats?.memories || 0}
+            change="+8%"
+            changeType="positive"
+            delay={0.3}
+          />
+          <StatCard
+            icon={<Activity className="w-5 h-5 text-white" />}
+            label="Profile Views"
+            value={stats?.profileViews || 0}
+            change="+15%"
+            changeType="positive"
+            delay={0.4}
+          />
+          <StatCard
+            icon={<Users className="w-5 h-5 text-white" />}
+            label="Connections"
+            value={stats?.connections || 0}
+            change="+3%"
+            changeType="positive"
+            delay={0.5}
+          />
         </div>
 
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
-          <div className="text-center md:text-left">
-            <h2 className="text-2xl font-bold mb-3 flex items-center justify-center md:justify-start gap-3">
+        {/* Main Content */}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Quick Actions */}
+          <div className="lg:col-span-2">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <h2 className="text-2xl font-bold mb-6 flex items-center">
+                <Zap className="w-6 h-6 mr-2 text-yellow-400" />
+                Quick Actions
+              </h2>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {quickActions.map((action, index) => (
+                  <QuickActionCard key={action.title} {...action} delay={0.7 + index * 0.1} />
+                ))}
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Activity Feed */}
+          <div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+            >
+              <h2 className="text-2xl font-bold mb-6 flex items-center">
+                <Clock className="w-6 h-6 mr-2 text-blue-400" />
+                Recent Activity
+              </h2>
+              <div className="space-y-3">
+                {recentActivities.map((activity, index) => (
+                  <ActivityItem key={index} {...activity} />
+                ))}
+              </div>
+              <Link
+                href="/activity"
+                className="block mt-4 text-center p-3 glass rounded-xl hover:bg-white/5 transition-all text-sm font-medium text-pink-400 hover:text-pink-300"
+              >
+                View All Activity →
+              </Link>
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Mode Status Banner */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1 }}
+          className="mt-12 glass rounded-2xl p-8 relative overflow-hidden"
+        >
+          <div className={`absolute top-0 right-0 w-64 h-64 opacity-10 ${user.modeDefault === 'love' ? 'text-pink-400' : 'text-blue-400'
+            }`}>
+            {user.modeDefault === 'love' ? (
+              <Heart className="w-full h-full" />
+            ) : (
+              <Users className="w-full h-full" />
+            )}
+          </div>
+
+          <div className="relative z-10">
+            <h3 className="text-2xl font-bold mb-4 flex items-center">
               {user.modeDefault === 'love' ? (
                 <>
-                  <div className="p-3 bg-pink-500/20 rounded-2xl"><Heart className="w-8 h-8 text-pink-500 fill-pink-500" /></div>
-                  <span className="bg-gradient-to-r from-pink-400 to-rose-400 bg-clip-text text-transparent">Romantic Journey</span>
+                  <Heart className="w-6 h-6 mr-3 text-pink-400 fill-pink-400" />
+                  <span className="gradient-text">Romantic Journey Active</span>
                 </>
               ) : (
                 <>
-                  <div className="p-3 bg-blue-500/20 rounded-2xl"><Users className="w-8 h-8 text-blue-500" /></div>
-                  <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Friendship Circles</span>
+                  <Users className="w-6 h-6 mr-3 text-blue-400" />
+                  <span className="gradient-text">Friendship Discovery Active</span>
                 </>
               )}
-              <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/50 border border-white/20 uppercase tracking-widest ml-2">Active</span>
-            </h2>
-            <p className="text-gray-400 max-w-xl">
-              Mode is permanently locked for this account. To explore other connection types, please logout and create a new identity.
+            </h3>
+
+            <p className="text-gray-300 mb-6 max-w-2xl">
+              {user.modeDefault === 'love'
+                ? "You're currently in Love mode, where meaningful romantic connections await. Our AI is working to find your perfect match based on deep compatibility."
+                : "You're in Friend mode, perfect for building lasting friendships. Connect with like-minded people who share your interests and values."
+              }
             </p>
-          </div>
-          <div className="shrink-0">
-            <div className="flex flex-col items-center gap-2 p-5 bg-white/5 rounded-3xl border border-white/10 min-w-[120px]">
-              <div className="text-3xl">🔒</div>
-              <div className="text-xs font-black text-white/40 uppercase tracking-widest">Locked</div>
+
+            <div className="flex flex-wrap gap-4">
+              <Link
+                href="/matches"
+                className="px-6 py-3 bg-gradient-primary rounded-xl font-bold hover:shadow-glow-primary transition-all hover:scale-105 flex items-center gap-2"
+              >
+                <Search className="w-5 h-5" />
+                {user.modeDefault === 'love' ? 'Find Love' : 'Find Friends'}
+              </Link>
+              <Link
+                href="/ai/select-mode"
+                className="px-6 py-3 glass rounded-xl font-bold hover:shadow-glass-lg transition-all hover:scale-105 flex items-center gap-2"
+              >
+                <Sparkles className="w-5 h-5" />
+                Explore AI Features
+              </Link>
             </div>
           </div>
-        </div>
-      </motion.div>
-
-      {/* Quick Actions Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
-        {[
-          { icon: <Image />, title: "Memories", desc: "Your visual timeline", link: "/memories", stats: stats?.memories, color: "rgba(59, 130, 246, 0.2)" },
-          { icon: <MessageCircle />, title: "Chat", desc: "Instant interactions", link: "/chat", stats: stats?.chats, color: "rgba(168, 85, 247, 0.2)" },
-          { icon: <Calendar />, title: "Calendar", desc: "Scheduled moments", link: "/calendar", color: "rgba(34, 197, 94, 0.2)" },
-          { icon: <Shield />, title: "Verify", desc: "Trust building", link: "/verification", color: "rgba(249, 115, 22, 0.2)" },
-          { icon: <Users />, title: "Games", desc: "Play & Connect", link: "/games", color: "rgba(236, 72, 153, 0.2)" }
-        ].map((action, i) => (
-          <motion.div
-            key={action.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 + i * 0.05 }}
-          >
-            <Link href={action.link} className="block group">
-              <SpotlightCard
-                className="p-6 h-full flex flex-col bg-[#0f172a]/50 border-white/5"
-                spotlightColor={action.color}
-              >
-                <div className="flex items-start justify-between mb-6">
-                  <div className="p-3 bg-white/5 rounded-2xl group-hover:bg-white/10 transition-colors text-white/80 group-hover:text-white">
-                    {React.cloneElement(action.icon as React.ReactElement, { className: "w-6 h-6" })}
-                  </div>
-                  {action.stats !== undefined && (
-                    <div className="text-3xl font-black bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">
-                      {action.stats}
-                    </div>
-                  )}
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2 group-hover:translate-x-1 transition-transform">{action.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed group-hover:text-gray-400 transition-colors">{action.desc}</p>
-
-                <div className="mt-6 pt-4 border-t border-white/5 flex items-center gap-2 text-xs font-bold text-white/30 group-hover:text-pink-500 transition-colors">
-                  OPEN MODULE <ArrowRight className="w-3 h-3" />
-                </div>
-              </SpotlightCard>
-            </Link>
-          </motion.div>
-        ))}
+        </motion.div>
       </div>
-    </motion.div>
+    </div>
   )
 }
 

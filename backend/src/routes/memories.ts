@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import MemoryItem from '../models/MemoryItem';
+import { supabase } from '../lib/supabaseClient';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 // Create uploads directory if it doesn't exist
@@ -14,18 +14,10 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure multer for file storage
 const storage = multer.diskStorage({
-  destination: (
-    req: Express.Request,
-    file: Express.Multer.File,
-    cb: (error: Error | null, destination: string) => void
-  ) => {
+  destination: (req, file, cb: any) => {
     cb(null, uploadsDir);
   },
-  filename: (
-    req: Express.Request,
-    file: Express.Multer.File,
-    cb: (error: Error | null, filename: string) => void
-  ) => {
+  filename: (req, file, cb: any) => {
     const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
     const ext = path.extname(file.originalname);
     cb(null, `${uniqueSuffix}${ext}`);
@@ -35,11 +27,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
-  fileFilter: (
-    req: Express.Request,
-    file: Express.Multer.File,
-    cb: (error: Error | null, acceptFile: boolean) => void
-  ) => {
+  fileFilter: (req, file, cb: any) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|webm/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -47,26 +35,24 @@ const upload = multer({
     if (mimetype && extname) {
       return cb(null, true);
     } else {
-      cb(new Error('Only image and video files are allowed'));
+      cb(new Error('Only image and video files are allowed'), false);
     }
   },
 });
 
 const router = express.Router();
 
-// Serve uploaded files (public endpoint for authenticated users)
+// Serve uploaded files
 router.get('/file/:filename', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const filename = req.params.filename;
     const filePath = path.join(uploadsDir, filename);
 
     if (!fs.existsSync(filePath)) {
-      // File missing on disk — redirect to frontend placeholder to avoid repeated 404s
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       return res.redirect(307, `${frontendUrl}/placeholder-image.svg`);
     }
 
-    // Set appropriate content-type based on file extension
     const ext = path.extname(filename).toLowerCase();
     let contentType = 'application/octet-stream';
     if (['.jpg', '.jpeg'].includes(ext)) contentType = 'image/jpeg';
@@ -74,24 +60,19 @@ router.get('/file/:filename', authenticate, async (req: AuthRequest, res: Respon
     else if (ext === '.gif') contentType = 'image/gif';
     else if (ext === '.webp') contentType = 'image/webp';
     else if (['.mp4'].includes(ext)) contentType = 'video/mp4';
-    else if (['.mov', '.quicktime'].includes(ext)) contentType = 'video/quicktime';
-    else if (['.avi'].includes(ext)) contentType = 'video/x-msvideo';
-    else if (['.webm'].includes(ext)) contentType = 'video/webm';
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
 
-    // Check if user has access to this file
-    const item = await MemoryItem.findOne({
-      cidOrUrl: filename,
-      $or: [
-        { userId: req.userId },
-        { visibility: 'public' },
-        { visibility: 'shared', sharedWith: req.userId }
-      ]
-    });
+    // Check access in Supabase
+    const { data: item, error } = await supabase
+      .from('memories')
+      .select('*')
+      .eq('url', filename)
+      .or(`user_id.eq.${req.userId},visibility.eq.public`)
+      .single();
 
-    if (!item && !filename.startsWith('photobooth-')) {
+    if (error && !filename.startsWith('photobooth-')) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -106,154 +87,70 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { visibility, tags, limit = 50, offset = 0 } = req.query;
 
-    const query: any = { userId: req.userId };
-    if (visibility) query.visibility = visibility;
-    if (tags) {
-      const tagArray = (tags as string).split(',').map(t => t.trim());
-      query.tags = { $in: tagArray };
-    }
+    let query = supabase
+      .from('memories')
+      .select('*', { count: 'exact' })
+      .eq('user_id', req.userId);
 
-    const items = await MemoryItem.find(query)
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit as string))
-      .skip(parseInt(offset as string));
+    if (visibility) query = query.eq('visibility', visibility);
+    if (tags) query = query.contains('tags', (tags as string).split(','));
 
-    const count = await MemoryItem.countDocuments({ userId: req.userId });
+    const { data: items, count, error } = await query
+      .order('created_at', { ascending: false })
+      .range(Number(offset), Number(offset) + Number(limit) - 1);
 
-    // Use backend URL for serving files
+    if (error) return res.status(500).json({ message: error.message });
+
     const apiUrl = process.env.API_URL || 'http://localhost:5000';
-    const itemsWithUrls = items.map(item => {
-      const filename = path.basename(item.cidOrUrl);
-      return {
-        ...item.toObject(),
-        url: `${apiUrl}/api/memories/file/${filename}`,
-        filename: filename,
-      };
-    });
+    const itemsWithUrls = items?.map((item: any) => ({
+      ...item,
+      url: `${apiUrl}/api/memories/file/${item.url}`,
+    }));
 
-    res.json({ items: itemsWithUrls, count, remaining: Math.max(0, 500 - count) });
+    res.json({ items: itemsWithUrls, count, remaining: Math.max(0, 500 - (count || 0)) });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Get single memory item
-router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const item = await MemoryItem.findOne({ _id: req.params.id, userId: req.userId });
-    if (!item) {
-      return res.status(404).json({ message: 'Memory item not found' });
-    }
-
-    res.json({
-      ...item.toObject(),
-      url: `/api/memories/file/${path.basename(item.cidOrUrl)}`,
-    });
-  } catch (error: any) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Upload memory item (photo/video)
+// Upload memory item
 router.post('/', authenticate, upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     const { title, tags, visibility = 'private', encrypted = false, encryptedData } = req.body;
 
-    // Check limit
-    const count = await MemoryItem.countDocuments({ userId: req.userId });
-    if (count >= 500) {
+    const { count } = await supabase.from('memories').select('*', { count: 'exact', head: true }).eq('user_id', req.userId);
+    if ((count || 0) >= 500) {
+      if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: 'Maximum 500 memory items allowed' });
     }
 
-    if (!req.file && !encryptedData) {
-      return res.status(400).json({ message: 'File or encrypted data required' });
-    }
+    if (!req.file && !encryptedData) return res.status(400).json({ message: 'File or data required' });
 
-    let cidOrUrl: string;
-    let mediaType: 'photo' | 'video';
+    const url = req.file ? req.file.filename : 'encrypted://' + Date.now();
+    const mediaType = req.file?.mimetype.startsWith('video/') ? 'video' : 'photo';
 
-    if (req.file) {
-      // Store file path
-      cidOrUrl = req.file.filename;
-      mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'photo';
-    } else {
-      // Encrypted data
-      cidOrUrl = 'encrypted://' + Date.now();
-      mediaType = 'photo'; // Default for encrypted
-    }
-
-    const item = new MemoryItem({
-      userId: req.userId,
-      cidOrUrl,
-      mediaType,
-      title: title || 'Untitled',
-      tags: tags ? tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
-      visibility,
-      encrypted: encrypted || !!encryptedData,
-      encryptedData,
-    });
-
-    await item.save();
-
-    res.status(201).json({
-      ...item.toObject(),
-      url: `/api/memories/file/${path.basename(cidOrUrl)}`,
-    });
-  } catch (error: any) {
-    // Delete uploaded file if item creation failed
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Upload multiple files
-router.post('/batch', authenticate, upload.array('files', 10), async (req: AuthRequest, res: Response) => {
-  try {
-    const files = req.files as Express.Multer.File[];
-    const { tags, visibility = 'private' } = req.body;
-
-    if (!files || files.length === 0) {
-      return res.status(400).json({ message: 'No files provided' });
-    }
-
-    const count = await MemoryItem.countDocuments({ userId: req.userId });
-    if (count + files.length > 500) {
-      // Delete uploaded files
-      files.forEach(file => {
-        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-      });
-      return res.status(400).json({ message: 'Upload would exceed 500 item limit' });
-    }
-
-    const items = await Promise.all(
-      files.map(async (file) => {
-        const item = new MemoryItem({
-          userId: req.userId,
-          cidOrUrl: file.filename,
-          mediaType: file.mimetype.startsWith('video/') ? 'video' : 'photo',
-          title: file.originalname.replace(/\.[^/.]+$/, ''),
-          tags: tags ? tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
-          visibility,
-        });
-        return item.save();
+    const { data: item, error } = await supabase
+      .from('memories')
+      .insert({
+        user_id: req.userId,
+        url,
+        media_type: mediaType,
+        title: title || 'Untitled',
+        tags: tags ? tags.split(',').map((t: string) => t.trim()) : [],
+        visibility,
+        encrypted,
+        encrypted_data: encryptedData,
       })
-    );
+      .select()
+      .single();
 
-    res.status(201).json({
-      items: items.map(item => ({
-        ...item.toObject(),
-        url: `/api/memories/file/${path.basename(item.cidOrUrl)}`,
-      })),
-    });
-  } catch (error: any) {
-    // Clean up uploaded files on error
-    if (req.files) {
-      (req.files as Express.Multer.File[]).forEach(file => {
-        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-      });
+    if (error) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(500).json({ message: error.message });
     }
+
+    res.status(201).json({ ...item, url: `/api/memories/file/${url}` });
+  } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 });
@@ -261,24 +158,22 @@ router.post('/batch', authenticate, upload.array('files', 10), async (req: AuthR
 // Update memory item
 router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { title, tags, visibility, sharedWith } = req.body;
+    const { title, tags, visibility } = req.body;
+    const updates: any = {};
+    if (title) updates.title = title;
+    if (tags) updates.tags = tags.split(',').map((t: string) => t.trim());
+    if (visibility) updates.visibility = visibility;
 
-    const item = await MemoryItem.findOne({ _id: req.params.id, userId: req.userId });
-    if (!item) {
-      return res.status(404).json({ message: 'Memory item not found' });
-    }
+    const { data: item, error } = await supabase
+      .from('memories')
+      .update(updates)
+      .eq('id', req.params.id)
+      .eq('user_id', req.userId)
+      .select()
+      .single();
 
-    if (title) item.title = title;
-    if (tags) item.tags = tags.split(',').map((t: string) => t.trim()).filter(Boolean);
-    if (visibility) item.visibility = visibility;
-    if (sharedWith) item.sharedWith = sharedWith;
-
-    await item.save();
-
-    res.json({
-      ...item.toObject(),
-      url: `/api/memories/file/${path.basename(item.cidOrUrl)}`,
-    });
+    if (error) return res.status(404).json({ message: 'Memory not found or not authorized' });
+    res.json({ ...item, url: `/api/memories/file/${item.url}` });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -287,17 +182,19 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 // Delete memory item
 router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const item = await MemoryItem.findOneAndDelete({ _id: req.params.id, userId: req.userId });
-    if (!item) {
-      return res.status(404).json({ message: 'Memory item not found' });
-    }
+    const { data: item, error } = await supabase
+      .from('memories')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('user_id', req.userId)
+      .select()
+      .single();
 
-    // Delete physical file
-    if (item.cidOrUrl && !item.cidOrUrl.startsWith('encrypted://')) {
-      const filePath = path.join(uploadsDir, path.basename(item.cidOrUrl));
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+    if (error || !item) return res.status(404).json({ message: 'Memory not found' });
+
+    if (item.url && !item.url.startsWith('encrypted://')) {
+      const filePath = path.join(uploadsDir, item.url);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
     res.json({ message: 'Memory item deleted' });

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
+import Image from 'next/image'
 import Link from 'next/link'
 import { MessageCircle, Send, Plus, Search, Sparkles, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -28,13 +29,7 @@ export default function ChatListPage() {
     }
   }, [user, authLoading, router])
 
-  useEffect(() => {
-    if (user) {
-      fetchChats()
-    }
-  }, [user])
-
-  const fetchChats = async () => {
+  const fetchChats = useCallback(async () => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
       const response = await axios.get(`${API_URL}/api/chat`)
@@ -45,7 +40,13 @@ export default function ChatListPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (user) {
+      fetchChats()
+    }
+  }, [user, fetchChats])
 
   const requestOtp = async () => {
     if (!targetEmail.trim()) return toast.error('Enter an email')
@@ -169,9 +170,11 @@ export default function ChatListPage() {
                         <div className="flex items-center space-x-5">
                           <div className="relative">
                             {otherParticipant?.profilePhotos?.[0] ? (
-                              <img
+                              <Image
                                 src={otherParticipant.profilePhotos[0]}
                                 alt={otherParticipant.name}
+                                width={64}
+                                height={64}
                                 className="w-16 h-16 rounded-2xl object-cover border-2 border-white/10 group-hover:border-pink-500/50 transition-colors"
                               />
                             ) : (

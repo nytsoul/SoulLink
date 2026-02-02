@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
+import Image from 'next/image'
 import { Calendar as CalendarIcon, Plus, Download, X, ChevronLeft, ChevronRight, Heart, Briefcase, Bell, BookOpen, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -96,11 +97,7 @@ export default function CalendarPage() {
     if (!authLoading && !user) router.push('/login')
   }, [user, authLoading, router])
 
-  useEffect(() => {
-    if (user) fetchEvents()
-  }, [user])
-
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     try {
       const response = await axios.get(`${apiBase}/api/calendar`)
       setEvents(response.data.events || [])
@@ -110,7 +107,11 @@ export default function CalendarPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [apiBase])
+
+  useEffect(() => {
+    if (user) fetchEvents()
+  }, [user, fetchEvents])
 
   const ymd = (d: Date | string) => new Date(d).toISOString().slice(0, 10)
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -409,9 +410,11 @@ export default function CalendarPage() {
                             </p>
                           )}
                           {event.imageUrl && (
-                            <img
+                            <Image
                               src={event.imageUrl}
                               alt={event.title}
+                              width={500}
+                              height={300}
                               className="w-full max-w-md h-48 object-cover rounded-lg shadow-md cursor-pointer hover:scale-105 transition-transform"
                               onClick={() => window.open(event.imageUrl, '_blank')}
                             />

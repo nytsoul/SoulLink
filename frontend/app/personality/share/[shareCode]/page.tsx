@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
@@ -29,11 +29,7 @@ export default function SharedQuizPage() {
   const [sharedBy, setSharedBy] = useState<any>(null)
   const [originalQuizId, setOriginalQuizId] = useState('')
 
-  useEffect(() => {
-    fetchSharedQuiz()
-  }, [shareCode])
-
-  const fetchSharedQuiz = async () => {
+  const fetchSharedQuiz = useCallback(async () => {
     try {
       const response = await api.get(`/api/personality/share/${shareCode}`)
       setQuestions(response.data.quiz.questions)
@@ -46,7 +42,11 @@ export default function SharedQuizPage() {
       toast.error('Failed to load shared quiz')
       setLoading(false)
     }
-  }
+  }, [shareCode])
+
+  useEffect(() => {
+    fetchSharedQuiz()
+  }, [fetchSharedQuiz])
 
   const handleAnswer = (selectedOption: string, emoji: string, score: number) => {
     const newAnswers = [...answers]

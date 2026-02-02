@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter, useParams } from 'next/navigation'
 import axios from 'axios'
@@ -22,30 +22,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<Socket | null>(null)
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login')
-    }
-  }, [user, authLoading, router])
-
-  useEffect(() => {
-    if (user && chatId) {
-      fetchMessages()
-      connectSocket()
-    }
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect()
-      }
-    }
-  }, [user, chatId])
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const connectSocket = () => {
+  const connectSocket = useCallback(() => {
     const socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000', {
       auth: { token: localStorage.getItem('token') },
     })
@@ -65,9 +42,9 @@ export default function ChatPage() {
     })
 
     socketRef.current = socket
-  }
+  }, [chatId])
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       const response = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/api/chat/${chatId}/messages`
@@ -79,7 +56,30 @@ export default function ChatPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [chatId])
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login')
+    }
+  }, [user, authLoading, router])
+
+  useEffect(() => {
+    if (user && chatId) {
+      fetchMessages()
+      connectSocket()
+    }
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect()
+      }
+    }
+  }, [user, chatId, fetchMessages, connectSocket])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   const sendMessage = async () => {
     if (!newMessage.trim()) return
@@ -185,8 +185,8 @@ export default function ChatPage() {
               >
                 <div
                   className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.senderId._id === user.id
-                      ? 'bg-pink-500 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+                    ? 'bg-pink-500 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
                     }`}
                 >
                   <p className="text-sm font-semibold mb-1">

@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth' // Assuming this hook exists for auth state
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
+import Image from 'next/image'
 import api from '@/lib/api'
 import { Image as ImageIcon, Video, Upload, Trash2, Download, Eye, Sparkles, Shield } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -38,17 +39,10 @@ export default function MemoriesPage() {
     }
   }, [user, authLoading, router])
 
-  // Fetch memories once user is authenticated
-  useEffect(() => {
-    if (user) {
-      fetchMemories()
-    }
-  }, [user])
-
   // Helper function to safely get the API URL
   const getApiUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
-  const fetchMemories = async () => {
+  const fetchMemories = useCallback(async () => {
     try {
       const url = getApiUrl()
 
@@ -58,12 +52,12 @@ export default function MemoriesPage() {
       const items = (response.data.items || []).map((item: any) => {
         // Construct proper URL for the image
         let imageUrl = item.url
-        
+
         if (!imageUrl && (item.filename || item.cidOrUrl)) {
           const fileName = item.filename || item.cidOrUrl
           imageUrl = `${url}/api/memories/file/${fileName}`
         }
-        
+
         return {
           ...item,
           url: imageUrl,
@@ -76,7 +70,14 @@ export default function MemoriesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, []) // getApiUrl is stable
+
+  // Fetch memories once user is authenticated
+  useEffect(() => {
+    if (user) {
+      fetchMemories()
+    }
+  }, [user, fetchMemories])
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -241,26 +242,12 @@ export default function MemoriesPage() {
                         onMouseOut={(e) => (e.currentTarget as HTMLVideoElement).pause()}
                       />
                     ) : (
-                      <img
-                        src={memory.url}
+                      <Image
+                        src={memory.url || '/placeholder-image.svg'}
                         alt={memory.title || 'Memory'}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement
-                          target.onerror = null // Prevent infinite loop
-                          target.style.display = 'none'
-                          // Show placeholder
-                          const parent = target.parentElement
-                          if (parent) {
-                            parent.innerHTML = `
-                              <div class="w-full h-full flex items-center justify-center bg-gray-800">
-                                <svg class="w-20 h-20 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              </div>
-                            `
-                          }
-                        }}
+                        fill
+                        className="object-cover transition-transform duration-700 group-hover:scale-110"
+                        unoptimized={true} // Since it's from a dynamic API
                       />
                     )}
 
@@ -370,14 +357,15 @@ export default function MemoriesPage() {
                   className="w-full rounded-lg bg-black"
                 />
               ) : (
-                <img
-                  src={previewItem.url || '/placeholder-image.svg'}
-                  alt={previewItem.title}
-                  className="w-full h-auto rounded-lg object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/placeholder-image.svg'
-                  }}
-                />
+                <div className="relative w-full aspect-video">
+                  <Image
+                    src={previewItem.url || '/placeholder-image.svg'}
+                    alt={previewItem.title || 'Preview'}
+                    fill
+                    className="rounded-lg object-contain"
+                    unoptimized={true}
+                  />
+                </div>
               )}
             </div>
 

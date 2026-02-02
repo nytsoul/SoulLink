@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import axios from 'axios'
@@ -17,45 +17,7 @@ export default function CompatibilityResult({ params }: { params: { id: string }
         if (!authLoading && !user) router.push('/login')
     }, [user, authLoading, router])
 
-    useEffect(() => {
-        if (user && params.id) {
-            // We can reuse the join endpoint or create a specific result endpoint
-            // For now, let's assume we can fetch the quiz details if we are the creator or taker
-            // But we don't have a specific GET endpoint for quiz by ID in the plan.
-            // Let's assume the user just finished the quiz and we have the data, 
-            // OR we add a simple GET endpoint. 
-            // Actually, let's just use the data passed in state or fetch it if we had an endpoint.
-            // Since we didn't add a GET /quiz/:id endpoint, I'll mock it or assume the user just finished.
-            // Wait, I should have added a GET endpoint. Let's add a quick one or use the join logic if possible?
-            // No, join logic needs code. 
-            // Let's assume we can't fetch it easily without adding an endpoint.
-            // I'll add a simple client-side mock for now or try to fetch from a generic endpoint if available.
-            // Actually, I'll just show the score from the previous page if I could, but I can't.
-            // I will implement a fetch using the existing 'join' endpoint if I had the code, but I have ID.
-
-            // Correct approach: Add GET /quiz/:id to backend or just rely on the user having just finished.
-            // But to be robust, I'll just display a static "Success" for now if I can't fetch, 
-            // OR I'll try to fetch using a new endpoint I'll quickly add? 
-            // No, I'll stick to the plan. The plan didn't specify a GET result endpoint.
-            // I'll use a trick: The 'submit-taker' returns the score. I should have passed it via query param or state.
-            // But I can't easily pass state to a new page in Next.js app router without URL params.
-            // So I will assume the backend has a GET endpoint or I'll add it now.
-            // Let's add a simple GET /quiz/:id endpoint to backend in the next step if needed.
-            // For now, I'll just show a placeholder or try to fetch.
-
-            // Wait, I can't modify backend in this step easily without breaking flow.
-            // I will assume the score is passed in query params for now as a fallback?
-            // No, that's insecure/ugly.
-
-            // Let's just add the GET endpoint to the backend right now, it's quick.
-            // Actually, I'll do it in the next step.
-            // For this file, I'll write the code assuming the endpoint exists: GET /api/ai/quiz/:id
-
-            fetchQuizResult()
-        }
-    }, [user, params.id])
-
-    const fetchQuizResult = async () => {
+    const fetchQuizResult = useCallback(async () => {
         try {
             // This endpoint doesn't exist yet, I will add it.
             const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/quiz/${params.id}`)
@@ -66,7 +28,13 @@ export default function CompatibilityResult({ params }: { params: { id: string }
         } finally {
             setLoading(false)
         }
-    }
+    }, [params.id])
+
+    useEffect(() => {
+        if (user && params.id) {
+            fetchQuizResult()
+        }
+    }, [user, params.id, fetchQuizResult])
 
     if (loading) return <div className="flex justify-center items-center min-h-screen"><Loader2 className="animate-spin" /></div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import axios from 'axios'
@@ -22,13 +22,7 @@ export default function JoinCompatibilityQuiz({ params }: { params: { code: stri
         if (!authLoading && !user) router.push('/login')
     }, [user, authLoading, router])
 
-    useEffect(() => {
-        if (user && params.code) {
-            fetchQuiz()
-        }
-    }, [user, params.code])
-
-    const fetchQuiz = async () => {
+    const fetchQuiz = useCallback(async () => {
         try {
             const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/quiz/join`, {
                 code: params.code,
@@ -40,7 +34,13 @@ export default function JoinCompatibilityQuiz({ params }: { params: { code: stri
         } finally {
             setLoading(false)
         }
-    }
+    }, [params.code, router])
+
+    useEffect(() => {
+        if (user && params.code) {
+            fetchQuiz()
+        }
+    }, [user, params.code, fetchQuiz])
 
     const handleSubmit = async () => {
         setSubmitting(true)
