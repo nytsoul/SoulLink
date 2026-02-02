@@ -10,15 +10,20 @@ router.post(
   '/register',
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
-    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('email').trim().toLowerCase().isEmail().withMessage('Valid email is required'),
     body('phone').trim().notEmpty().withMessage('Phone is required'),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
     body('dob').isISO8601().withMessage('Valid date of birth is required'),
   ],
   async (req: Request, res: Response) => {
     try {
+      console.log('[DEBUG] Registration Request Body:', JSON.stringify(req.body, null, 2));
+      if (!supabase) return res.status(503).json({ message: 'Database client not initialized. Check server logs.' });
       const errors = validationResult(req);
-      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+      if (!errors.isEmpty()) {
+        console.error('[DEBUG] Validation Errors:', JSON.stringify(errors.array(), null, 2));
+        return res.status(400).json({ errors: errors.array() });
+      }
 
       const { name, email, phone, password, dob, gender, pronouns, location, bio, interests, profilePhotos, modeDefault } = req.body;
 
@@ -32,6 +37,7 @@ router.post(
       });
 
       if (authError || !authData.user) {
+        console.error('Supabase Auth error details:', JSON.stringify(authError, null, 2));
         return res.status(400).json({ message: authError?.message || 'Registration failed' });
       }
 
@@ -54,10 +60,8 @@ router.post(
         });
 
       if (profileError) {
-        // Rollback auth user if profile creation fails? Supabase doesn't have cross-store transactions easily.
-        // But for migration, we'll just handle the error.
         console.error('Profile creation error:', profileError);
-        return res.status(400).json({ message: 'Profile creation failed' });
+        return res.status(400).json({ message: `Profile creation failed: ${profileError.message}` });
       }
 
       res.status(201).json({
@@ -81,11 +85,13 @@ router.post(
 router.post(
   '/login',
   [
-    body('email').isEmail().normalizeEmail(),
+    body('email').trim().toLowerCase().isEmail(),
     body('password').notEmpty(),
   ],
   async (req: Request, res: Response) => {
     try {
+      console.log('[DEBUG] Login Request Body:', JSON.stringify(req.body, null, 2));
+      if (!supabase) return res.status(503).json({ message: 'Database client not initialized.' });
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
@@ -128,6 +134,7 @@ router.post(
 
 /* -------------------- GET CURRENT USER -------------------- */
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
+  if (!supabase) return res.status(503).json({ message: 'Database client not initialized.' });
   // Authentication middleware already fetched the profile and attached it to req.user
   if (!req.user) return res.status(404).json({ message: 'User not found' });
   res.json({ user: req.user });

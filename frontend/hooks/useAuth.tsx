@@ -46,7 +46,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`)
-      setUser(response.data.user)
+      const userData = response.data.user
+      // Map mode_default to modeDefault
+      if (userData && userData.mode_default) {
+        userData.modeDefault = userData.mode_default
+      }
+      setUser(userData)
     } catch (error) {
       localStorage.removeItem('token')
       delete axios.defaults.headers.common['Authorization']
@@ -63,7 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       localStorage.setItem('token', response.data.token)
       axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`
-      setUser(response.data.user)
+      const userData = response.data.user
+      if (userData && userData.mode_default) userData.modeDefault = userData.mode_default
+      setUser(userData)
       toast.success('Login successful!')
       router.push('/dashboard')
     } catch (error: any) {
@@ -75,11 +82,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (data: any) => {
     try {
       const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, data)
-      localStorage.setItem('token', response.data.token)
-      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`
-      setUser(response.data.user)
-      toast.success('Registration successful! Please verify your email and phone.')
-      router.push('/dashboard')
+      const { session, user } = response.data
+
+      if (session) {
+        localStorage.setItem('token', session.access_token)
+        axios.defaults.headers.common['Authorization'] = `Bearer ${session.access_token}`
+        const userData = user
+        if (userData && userData.mode_default) userData.modeDefault = userData.mode_default
+        setUser(userData)
+        toast.success('Registration successful!')
+        router.push('/dashboard')
+      } else {
+        toast.success('Registration successful! Please check your email to verify your account.')
+        router.push('/login')
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Registration failed')
       throw error

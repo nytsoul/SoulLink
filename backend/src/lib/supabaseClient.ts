@@ -1,6 +1,5 @@
+import './env';
 import { createClient } from '@supabase/supabase-js';
-
-console.log('[DIAGNOSTIC] supabaseClient.ts - Initializing...');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -19,19 +18,24 @@ const isValidUrl = (url: string | undefined) => {
     }
 };
 
-if (!isValidUrl(supabaseUrl) || !supabaseKey || supabaseUrl === 'your-supabase-url') {
-    console.error('\n❌ ERROR: Supabase configuration is missing or invalid!');
-    console.error('🔗 Please go to your Supabase project settings -> API and copy the Project URL and Service Role Key.');
-    console.error('📝 Update your .env file with these values:\n');
-    console.error('   SUPABASE_URL=https://your-project-ref.supabase.co');
-    console.error('   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key\n');
+const isValidKey = (key: string | undefined) => !!key && (key.startsWith('eyJ') || key.startsWith('sb_secret_'));
+
+if (!isValidUrl(supabaseUrl) || !isValidKey(supabaseKey) || supabaseUrl === 'your-supabase-url') {
+    console.error('\n' + '='.repeat(60));
+    console.error('❌ ERROR: Supabase configuration is missing or invalid!');
+    console.error('🔗 URL:', supabaseUrl || 'MISSING');
+    console.error('🔑 KEY:', isValidKey(supabaseKey) ? 'Valid Format' : 'INVALID FORMAT (Must start with eyJ or sb_secret_)');
+    console.error('\n👉 Please go to your Supabase project settings -> API and copy:');
+    console.error('   1. The Project URL');
+    console.error('   2. The "service_role" secret key');
+    console.error('='.repeat(60) + '\n');
 
     if (process.env.NODE_ENV === 'production') {
         process.exit(1);
     }
 }
 
-// Create client only if URL is valid to prevent crash
-export const supabase = isValidUrl(supabaseUrl)
-    ? createClient(supabaseUrl!, supabaseKey || '')
+// Create client only if URL and KEY are valid to prevent 401/400 errors from broken client
+export const supabase = (isValidUrl(supabaseUrl) && isValidKey(supabaseKey))
+    ? createClient(supabaseUrl!, supabaseKey!)
     : (null as any); 

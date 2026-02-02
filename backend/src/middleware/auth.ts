@@ -8,6 +8,10 @@ export const authenticate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    if (!supabase) {
+      res.status(503).json({ message: 'Database client not initialized' });
+      return;
+    }
     const token = req.headers.authorization?.replace('Bearer ', '');
 
     if (!token) {

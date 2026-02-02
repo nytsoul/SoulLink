@@ -1,11 +1,5 @@
+import './lib/env';
 import path from 'path';
-import dotenv from 'dotenv';
-const envResult = dotenv.config({ path: path.join(__dirname, '../.env') });
-console.log(`[DIAGNOSTIC] index.ts - CWD: ${process.cwd()}`);
-console.log(`[DIAGNOSTIC] index.ts - __dirname: ${__dirname}`);
-console.log(`[DIAGNOSTIC] index.ts - Env Load: ${envResult.error ? 'FAILED' : 'SUCCESS'}`);
-if (envResult.error) console.error(envResult.error);
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
